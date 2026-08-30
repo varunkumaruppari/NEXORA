@@ -8,7 +8,6 @@ import {
   LogIn,
   UserPlus,
   Search,
-  ShoppingCart,
   Sparkles,
   Bot
 } from 'lucide-react';
@@ -121,18 +120,6 @@ export default function Navbar() {
             </Link>
 
             <div className="h-5 w-px bg-slate-800 mx-1 hidden sm:block" />
-
-            {/* Cart Icon Visual */}
-            <button
-              aria-label="Shopping Cart"
-              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/60 relative transition-all"
-              title="Cart (1 Item)"
-            >
-              <ShoppingCart className="w-4 h-4 text-indigo-400" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-cyan-500 text-slate-950 font-extrabold text-[9px] flex items-center justify-center">
-                1
-              </span>
-            </button>
 
             {/* Login */}
             <Link
