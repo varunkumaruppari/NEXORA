@@ -150,7 +150,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
   // Phase 16D Real OSRM Road Route Engine Trigger
   useEffect(() => {
-    if (!selectedLocation || result) {
+    if (!selectedLocation) {
       setActiveRoute(null);
       setRouteState('IDLE');
       return;
@@ -161,7 +161,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     if (!isValidCoordinate(custLat, custLng)) return;
 
     const candidate = getCandidateWarehouse(custLat, custLng, [
-      { warehouseId: 'WH-HYD-001', name: 'NEXORA Gachibowli Hub', latitude: 17.4401, longitude: 78.3489 },
+      { warehouseId: 'WH-HYD-001', name: 'NEXORA Gachibowli Hub', latitude: 17.4238, longitude: 78.3375 },
       { warehouseId: 'WH-HYD-002', name: 'NEXORA HITEC City Express', latitude: 17.4435, longitude: 78.3772 },
       { warehouseId: 'WH-HYD-003', name: 'NEXORA Madhapur Hub', latitude: 17.4483, longitude: 78.3915 },
       { warehouseId: 'WH-HYD-004', name: 'NEXORA Kukatpally Depot', latitude: 17.4849, longitude: 78.4138 },
@@ -339,16 +339,18 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       }
       const activeSelectedWhId = result?.warehouseId || candidateWh?.warehouseId;
 
-      // Phase 16D Unified Route Data Object (from backend result OR active OSRM route)
-      const routeData = result?.eligible
+      // Phase 16O Unified Route Data Object (from backend result OR active OSRM route)
+      const routeData = (result && (result.routeGeometry || result.geometry || result.distanceKm != null))
         ? {
             distanceKm: result.distanceKm,
             durationMinutes: result.durationMinutes || result.travelTimeMinutes,
-            geometry: (result.route?.geometry && result.route.geometry.length > 0)
-              ? result.route.geometry
-              : result.routeGeometry,
-            warehouseLatitude: result.warehouseLatitude,
-            warehouseLongitude: result.warehouseLongitude,
+            geometry: Array.isArray(result.geometry) && result.geometry.length > 0
+              ? result.geometry
+              : (Array.isArray(result.routeGeometry) && result.routeGeometry.length > 0
+                ? result.routeGeometry
+                : (activeRoute?.geometry || [])),
+            warehouseLatitude: result.warehouseLatitude || candidateWh?.latitude,
+            warehouseLongitude: result.warehouseLongitude || candidateWh?.longitude,
           }
         : (activeRoute && activeRoute.available && candidateWh)
           ? {
@@ -364,13 +366,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         const whLat = Number(routeData.warehouseLatitude);
         const whLng = Number(routeData.warehouseLongitude);
 
-        const rawRoadGeom = (routeData.geometry && routeData.geometry.length > 0)
-          ? routeData.geometry
-          : [[whLat, whLng], [activeCustLat, activeCustLng]];
+        let rawRoadGeom = routeData.geometry;
+        if (rawRoadGeom && rawRoadGeom.type === 'LineString' && Array.isArray(rawRoadGeom.coordinates)) {
+          rawRoadGeom = rawRoadGeom.coordinates.map(([lng, lat]) => [lat, lng]);
+        }
 
-        const roadGeom = rawRoadGeom.filter(
-          (pt) => Array.isArray(pt) && pt.length >= 2 && !isNaN(pt[0]) && !isNaN(pt[1])
-        );
+        const roadGeom = Array.isArray(rawRoadGeom)
+          ? rawRoadGeom.filter((pt) => Array.isArray(pt) && pt.length >= 2 && !isNaN(pt[0]) && !isNaN(pt[1]))
+          : [];
 
         if (roadGeom.length >= 2) {
           L.polyline(roadGeom, {
@@ -385,7 +388,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           const midIndex = Math.floor(roadGeom.length / 2);
           const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
 
-          const distText = routeData.distanceKm < 1 ? `Approx. ${routeData.distanceKm} km` : `${routeData.distanceKm} km`;
+          const distText = `${Number(routeData.distanceKm || 0).toFixed(2)} km`;
           const durText = routeData.durationMinutes ? ` • ~${routeData.durationMinutes} min` : '';
 
           const badgeIcon = L.divIcon({
@@ -823,7 +826,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">Road Distance</span>
                       <span className="font-semibold text-white">
-                        {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
+                        {Number(result.distanceKm || 0).toFixed(2)} km
                       </span>
                     </div>
 
@@ -892,7 +895,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                       <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
                         <span className="text-[10px] uppercase font-bold text-slate-500 block">Road Distance</span>
                         <span className="font-semibold text-white">
-                          {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
+                          {Number(result.distanceKm || 0).toFixed(2)} km
                         </span>
                       </div>
 
