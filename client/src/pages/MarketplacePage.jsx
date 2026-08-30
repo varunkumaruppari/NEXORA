@@ -35,19 +35,20 @@ export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [fastDeliveryProduct, setFastDeliveryProduct] = useState(null);
   
-  // Contextual Customer Location & Delivery Results Cache
-  const [customerLocation, setCustomerLocation] = useState(() => {
-    try {
-      const saved = localStorage.getItem('nexora_customer_location');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+  // Contextual Customer Location & Delivery Results Cache (Initial state: null until user selects location)
+  const [customerLocation, setCustomerLocation] = useState(null);
 
   const [deliveryCache, setDeliveryCache] = useState({});
 
   const handleUpdateLocation = (newPin, newAddr = '') => {
+    if (!newPin && !newAddr) {
+      setCustomerLocation(null);
+      setDeliveryCache({});
+      try {
+        localStorage.removeItem('nexora_customer_location');
+      } catch (e) {}
+      return;
+    }
     const loc = { pincode: newPin, address: newAddr };
     setCustomerLocation(loc);
     try {
@@ -209,7 +210,7 @@ export default function MarketplacePage() {
                       ? customerLocation.address
                       : customerLocation?.pincode
                       ? `Delivering to PIN ${customerLocation.pincode}`
-                      : 'Location not set (Default: Hyderabad 500081)'}
+                      : 'No delivery location selected'}
                   </span>
                 </div>
               </div>
@@ -354,7 +355,7 @@ export default function MarketplacePage() {
         isOpen={!!fastDeliveryProduct}
         onClose={() => setFastDeliveryProduct(null)}
         product={fastDeliveryProduct}
-        defaultPincode={customerLocation?.pincode || '500081'}
+        defaultPincode={customerLocation?.pincode || ''}
         onDeliveryCheckResult={handleDeliveryCheckResult}
       />
 
