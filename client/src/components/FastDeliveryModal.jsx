@@ -291,11 +291,10 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           attributionControl: false,
         });
 
-        const cartoTileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-        L.tileLayer(cartoTileUrl, {
+        const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        L.tileLayer(tileUrl, {
           maxZoom: 19,
-          subdomains: 'abcd',
-          attribution: '&copy; <a href="https://carto.com/" target="_blank" rel="noopener noreferrer">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
         }).addTo(map);
 
         markersLayerRef.current = L.layerGroup().addTo(map);
@@ -883,9 +882,22 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
               ) : (
                 <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 space-y-4 shadow-xl">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-amber-400 text-xs font-bold">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Fast delivery unavailable</span>
+                    <div className={`inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-bold ${
+                      result.distanceKm != null && result.distanceKm <= 35
+                        ? 'bg-emerald-950/80 border border-emerald-500/30 text-emerald-400'
+                        : 'bg-rose-950/80 border border-rose-500/30 text-rose-400'
+                    }`}>
+                      {result.distanceKm != null && result.distanceKm <= 35 ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>✓ CAN BE DELIVERED (Within Service Area)</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                          <span>✕ Cannot Be Fast Delivered</span>
+                        </>
+                      )}
                     </div>
                     <span className="text-xs font-semibold text-slate-400">PIN: {result.pincode}</span>
                   </div>
@@ -919,7 +931,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
                       <div className="flex items-center space-x-2 text-amber-300 font-bold">
                         <Truck className="w-4 h-4 text-amber-400" />
-                        <span>📦 Standard Delivery Available (Arrives in 2-3 Days)</span>
+                        <span>📦 Standard Delivery Active (Arrives in 2-3 Days)</span>
                       </div>
                       {result.estimatedDeliveryDate && (
                         <p className="text-slate-300 text-[11px] pl-6">
