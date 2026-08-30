@@ -747,7 +747,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             </div>
           </div>
 
-          <div className="relative h-48 sm:h-52 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden p-2 flex flex-col justify-between shadow-inner shrink-0">
+          <div className="relative h-56 sm:h-60 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden p-2 flex flex-col justify-between shadow-inner shrink-0">
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 z-10 bg-slate-950/90 px-2.5 py-1 rounded-lg backdrop-blur-sm">
               <span className="flex items-center gap-1.5 text-white">
                 <Building2 className="w-3.5 h-3.5 text-amber-400" />
