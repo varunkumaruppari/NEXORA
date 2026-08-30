@@ -39,7 +39,7 @@ const HYD_HUBS_MAP = [
   { id: 'WH-HYD-010', name: 'Shamshabad Hub', x: 46, y: 88, status: 'UNAVAILABLE' },
 ];
 
-export default function FastDeliveryModal({ isOpen, onClose, product, defaultPincode = '500081' }) {
+export default function FastDeliveryModal({ isOpen, onClose, product, defaultPincode = '500081', onDeliveryCheckResult = null }) {
   const [pincode, setPincode] = useState(defaultPincode);
   const [address, setAddress] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -81,6 +81,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
       if (response.data) {
         setResult(response.data);
+        if (onDeliveryCheckResult && product?.id) {
+          onDeliveryCheckResult(product.id, qtyToCheck, cleanPin, response.data);
+        }
       } else {
         throw new Error('Malformed API response');
       }
@@ -124,6 +127,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           if (response.data) {
             setResult(response.data);
             if (response.data.pincode) setPincode(response.data.pincode);
+            if (onDeliveryCheckResult && product?.id) {
+              onDeliveryCheckResult(product.id, quantity, response.data.pincode || '500081', response.data);
+            }
           }
         } catch (err) {
           setErrorMsg('Failed to verify GPS location.');

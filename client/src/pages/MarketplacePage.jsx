@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   MOCK_PRODUCTS,
@@ -6,6 +6,7 @@ import {
   MARKETPLACE_CATEGORIES
 } from '../data/mockData';
 import FastDeliveryModal from '../components/FastDeliveryModal';
+import ProductDeliveryState from '../components/ProductDeliveryState';
 import {
   ShoppingBag,
   Package,
@@ -25,7 +26,9 @@ import {
   Headphones,
   Smartphone,
   Watch,
-  Laptop
+  Laptop,
+  MapPin,
+  Edit3
 } from 'lucide-react';
 
 export default function MarketplacePage() {
@@ -33,6 +36,36 @@ export default function MarketplacePage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [fastDeliveryProduct, setFastDeliveryProduct] = useState(null);
+  
+  // Contextual Customer Location & Delivery Results Cache
+  const [customerLocation, setCustomerLocation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nexora_customer_location');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [deliveryCache, setDeliveryCache] = useState({});
+
+  const handleUpdateLocation = (newPin, newAddr = '') => {
+    const loc = { pincode: newPin, address: newAddr };
+    setCustomerLocation(loc);
+    try {
+      localStorage.setItem('nexora_customer_location', JSON.stringify(loc));
+    } catch (e) {}
+    // Invalidate delivery results when location changes
+    setDeliveryCache({});
+  };
+
+  const handleDeliveryCheckResult = (productId, quantity, pin, result) => {
+    const cacheKey = `${productId}_${quantity}_${pin}`;
+    setDeliveryCache((prev) => ({
+      ...prev,
+      [cacheKey]: result,
+    }));
+  };
 
   // Filter products by category and search
   const filteredProducts = MOCK_PRODUCTS.filter((product) => {
@@ -161,8 +194,56 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* SEARCH & CATEGORY FILTERS */}
+        {/* SEARCH, LOCATION & CATEGORY FILTERS */}
         <div className="space-y-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 glass-panel p-4 rounded-2xl border border-slate-800">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Customer Delivery Location
+                </span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-bold text-white">
+                    {customerLocation?.address
+                      ? customerLocation.address
+                      : customerLocation?.pincode
+                      ? `Delivering to PIN ${customerLocation.pincode}`
+                      : 'Location not set (Default: Hyderabad 500081)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 w-full md:w-auto">
+              <input
+                type="text"
+                maxLength={6}
+                placeholder="Enter 6-digit PIN"
+                value={customerLocation?.pincode || ''}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  handleUpdateLocation(val);
+                }}
+                className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 w-36"
+              />
+              <button
+                onClick={() => handleUpdateLocation('500081', 'HITEC City, Hyderabad')}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 transition-colors whitespace-nowrap"
+              >
+                Set HITEC City (500081)
+              </button>
+              <button
+                onClick={() => handleUpdateLocation('500032', 'Gachibowli, Hyderabad')}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 transition-colors whitespace-nowrap"
+              >
+                Set Gachibowli (500032)
+              </button>
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-indigo-400" />
@@ -240,7 +321,7 @@ export default function MarketplacePage() {
 
                 {/* Price & Delivery */}
                 <div className="space-y-3 pt-3 border-t border-slate-800/80">
-                  <div className="flex items-baseline justify-between">
+                  <div className="flex items-center justify-between">
                     <div>
                       <span className="text-xl font-extrabold text-white">
                         ₹{product.price.toLocaleString('en-IN')}
@@ -251,13 +332,14 @@ export default function MarketplacePage() {
                         </span>
                       )}
                     </div>
-                    <button
-                      onClick={() => setFastDeliveryProduct(product)}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 transition-all flex items-center space-x-1 shadow-sm"
-                    >
-                      <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      <span>Check Fast Delivery</span>
-                    </button>
+                    <ProductDeliveryState
+                      product={product}
+                      quantity={1}
+                      customerLocation={customerLocation}
+                      onOpenModal={(p) => setFastDeliveryProduct(p)}
+                      onDeliveryCheckResult={handleDeliveryCheckResult}
+                      cachedResult={deliveryCache[`${product.id}_1_${customerLocation?.pincode || '500081'}`]}
+                    />
                   </div>
 
                   {/* Actions */}
@@ -303,7 +385,8 @@ export default function MarketplacePage() {
         isOpen={!!fastDeliveryProduct}
         onClose={() => setFastDeliveryProduct(null)}
         product={fastDeliveryProduct}
-        defaultPincode="500081"
+        defaultPincode={customerLocation?.pincode || '500081'}
+        onDeliveryCheckResult={handleDeliveryCheckResult}
       />
 
       {/* 3. FOOTER */}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MOCK_ORDERS, MOCK_PRODUCTS } from '../data/mockData';
 import FastDeliveryModal from '../components/FastDeliveryModal';
+import ProductDeliveryState from '../components/ProductDeliveryState';
 import {
   Package,
   CheckCircle2,
@@ -143,13 +144,12 @@ export default function OrderDetailsPage() {
                     <MapPin className="w-4 h-4 text-cyan-400" />
                     <span>Shipping Address</span>
                   </div>
-                  <button
-                    onClick={() => setIsDeliveryModalOpen(true)}
-                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 transition-all flex items-center space-x-1"
-                  >
-                    <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    <span>Check 1-Day Delivery</span>
-                  </button>
+                  <ProductDeliveryState
+                    product={matchedProduct}
+                    quantity={order.quantity || 1}
+                    customerLocation={{ pincode: order.shippingAddress?.pincode || '500081' }}
+                    onOpenModal={() => setIsDeliveryModalOpen(true)}
+                  />
                 </div>
                 <p className="font-bold text-sm text-white">{order.shippingAddress.name || order.customerName}</p>
                 <p className="text-xs text-slate-300">{order.shippingAddress.street}</p>
