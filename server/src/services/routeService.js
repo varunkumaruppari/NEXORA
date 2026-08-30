@@ -84,7 +84,7 @@ export async function calculateRoute(origin, destination) {
         // Convert to Leaflet format: [latitude, longitude]
         const leafletGeometry = rawCoords.map(([lon, lat]) => [lat, lon]);
 
-        const distanceKm = Math.round((distMeters / 1000) * 10) / 10;
+        const distanceKm = Number((distMeters / 1000).toFixed(2));
         const durationMinutes = Math.round(durationSec / 60);
 
         const result = {
@@ -107,7 +107,7 @@ export async function calculateRoute(origin, destination) {
 
   // 2. Deterministic Hyderabad Road Curvature & Waypoint Interpolation Engine Fallback
   const haversineDist = calculateHaversineDistance(oLat, oLon, dLat, dLon);
-  const roadDistanceKm = Math.round(haversineDist * 1.25 * 10) / 10;
+  const roadDistanceKm = Number((haversineDist * 1.25).toFixed(2));
   const durationMinutes = roadDistanceKm === 0 ? 0 : Math.round((roadDistanceKm / 30) * 60) + 10;
 
   // Generate intermediate road curvature waypoints for smooth polyline rendering

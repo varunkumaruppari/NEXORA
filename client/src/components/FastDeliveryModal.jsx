@@ -887,6 +887,31 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     <span className="text-xs font-semibold text-slate-400">PIN: {result.pincode}</span>
                   </div>
 
+                  {result.distanceKm != null && (
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Road Distance</span>
+                        <span className="font-semibold text-white">
+                          {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Geographic Gate (&le;35 km)</span>
+                        <span className={`font-semibold ${result.distanceKm <= 35 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {result.distanceKm <= 35 ? '✓ Within 35 km Range' : '✕ Outside 35 km Range'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {result.warehouseName && (
+                    <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
+                      <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <span>Evaluated Hub: <strong>{result.warehouseName}</strong></span>
+                    </div>
+                  )}
+
                   {result.deliveryType === 'STANDARD' && (
                     <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
                       <div className="flex items-center space-x-2 text-amber-300 font-bold">

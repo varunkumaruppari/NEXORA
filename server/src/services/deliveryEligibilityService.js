@@ -190,6 +190,8 @@ export async function checkDeliveryEligibility(options = {}) {
     let distanceKm = 0;
     let durationMinutes = 0;
     let distanceType = 'ROAD';
+    let routeGeometry = [];
+    let routeProvider = 'NONE';
 
     // Primary zone warehouse check
     if (zoneInfo.primaryWarehouse && WAREHOUSES[zoneInfo.primaryWarehouse]) {
@@ -200,22 +202,7 @@ export async function checkDeliveryEligibility(options = {}) {
       }
     }
 
-    // Multi-warehouse ranking: iterate through all candidate Hyderabad hubs to find best feasible stock
-    if (!selectedWarehouse) {
-      for (const w of candidateWarehouses) {
-        const stockData = productStocks[w.warehouseId];
-        if (stockData && stockData.stock >= qty) {
-          selectedWarehouse = w;
-          break;
-        }
-      }
-    }
-
-    let routeGeometry = [];
-    let routeProvider = 'NONE';
-
-    // Calculate real road distance, travel time, and road geometry via route service
-    if (selectedWarehouse && geocodeResult.latitude && geocodeResult.longitude) {
+    if (selectedWarehouse && geocodeResult.latitude != null && geocodeResult.longitude != null) {
       const routeResult = await calculateRoute(
         { latitude: selectedWarehouse.latitude, longitude: selectedWarehouse.longitude },
         { latitude: geocodeResult.latitude, longitude: geocodeResult.longitude }
@@ -225,9 +212,39 @@ export async function checkDeliveryEligibility(options = {}) {
       distanceType = routeResult.distanceType || 'ROAD';
       routeGeometry = routeResult.geometry || [];
       routeProvider = routeResult.provider || 'OSRM_ROUTING_ENGINE';
-    } else {
-      distanceKm = 14.2;
-      durationMinutes = 45;
+    } else if (geocodeResult.latitude != null && geocodeResult.longitude != null) {
+      let evaluatedCandidates = [];
+      for (const w of candidateWarehouses) {
+        const stockData = productStocks[w.warehouseId];
+        const hasStock = stockData && stockData.stock >= qty;
+        const routeResult = await calculateRoute(
+          { latitude: w.latitude, longitude: w.longitude },
+          { latitude: geocodeResult.latitude, longitude: geocodeResult.longitude }
+        );
+        evaluatedCandidates.push({
+          warehouse: w,
+          hasStock: !!hasStock,
+          distanceKm: routeResult.distanceKm,
+          durationMinutes: routeResult.durationMinutes,
+          geometry: routeResult.geometry,
+          distanceType: routeResult.distanceType || 'ROAD',
+          provider: routeResult.provider || 'OSRM_ROUTING_ENGINE',
+        });
+      }
+
+      evaluatedCandidates.sort((a, b) => {
+        if (a.hasStock !== b.hasStock) return b.hasStock ? 1 : -1;
+        if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+        return a.warehouse.warehouseId.localeCompare(b.warehouse.warehouseId);
+      });
+
+      const bestCandidate = evaluatedCandidates[0] || null;
+      selectedWarehouse = bestCandidate?.warehouse || candidateWarehouses[0] || null;
+      distanceKm = bestCandidate?.distanceKm || 0;
+      durationMinutes = bestCandidate?.durationMinutes || 0;
+      distanceType = bestCandidate?.distanceType || 'ROAD';
+      routeGeometry = bestCandidate?.geometry || [];
+      routeProvider = bestCandidate?.provider || 'NONE';
     }
 
     // -------------------------------------------------------------
@@ -266,6 +283,8 @@ export async function checkDeliveryEligibility(options = {}) {
         deliveryType: 'STANDARD',
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
+        warehouseId: selectedWarehouse?.warehouseId || null,
+        warehouseName: selectedWarehouse?.name || null,
         distanceKm,
         reasonCode: 'INSUFFICIENT_STOCK',
         customerMessage: REASON_MESSAGES.INSUFFICIENT_STOCK,
@@ -292,6 +311,7 @@ export async function checkDeliveryEligibility(options = {}) {
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
         warehouseId: selectedWarehouse.warehouseId,
+        warehouseName: selectedWarehouse.name,
         distanceKm,
         durationMinutes,
         reasonCode: 'ONE_DAY_NOT_SUPPORTED',
@@ -317,9 +337,13 @@ export async function checkDeliveryEligibility(options = {}) {
         deliveryType: 'STANDARD',
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
-        warehouseId: selectedWarehouse.warehouseId,
+        warehouseId: selectedWarehouse?.warehouseId || null,
+        warehouseName: selectedWarehouse?.name || null,
+        warehouseLatitude: selectedWarehouse?.latitude || null,
+        warehouseLongitude: selectedWarehouse?.longitude || null,
         distanceKm,
         durationMinutes,
+        geometry: routeGeometry,
         reasonCode: 'DISTANCE_TOO_FAR',
         customerMessage: REASON_MESSAGES.DISTANCE_TOO_FAR,
       });
@@ -353,6 +377,7 @@ export async function checkDeliveryEligibility(options = {}) {
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
         warehouseId: selectedWarehouse.warehouseId,
+        warehouseName: selectedWarehouse.name,
         distanceKm,
         durationMinutes,
         operatingHoursStatus: 'CLOSED',
@@ -386,6 +411,7 @@ export async function checkDeliveryEligibility(options = {}) {
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
         warehouseId: selectedWarehouse.warehouseId,
+        warehouseName: selectedWarehouse.name,
         cutoffTime: selectedWarehouse.cutoffTime,
         cutoffFormatted,
         minutesUntilCutoff: 0,
@@ -432,6 +458,7 @@ export async function checkDeliveryEligibility(options = {}) {
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
         warehouseId: selectedWarehouse.warehouseId,
+        warehouseName: selectedWarehouse.name,
         distanceKm,
         durationMinutes,
         reasonCode,
