@@ -78,7 +78,7 @@ export const WAREHOUSES = {
     latitude: 17.4399,
     longitude: 78.4983,
     tier: 'TIER_2',
-    oneDayEnabled: false, // Maintenance / Standard 2-Day testing!
+    oneDayEnabled: true,
     openingTime: '08:00',
     closingTime: '19:00',
     cutoffTime: '14:00', // 2:00 PM
@@ -224,7 +224,7 @@ export const DELIVERY_ZONES = {
 
   // Central / Secunderabad / Begumpet
   '500001': { pincode: '500001', city: 'Hyderabad', state: 'Telangana', latitude: 17.3850, longitude: 78.4867, zoneName: 'Hyderabad Abids Central Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-006', standardTransitDays: 2 },
-  '500003': { pincode: '500003', city: 'Hyderabad', state: 'Telangana', latitude: 17.4399, longitude: 78.4983, zoneName: 'Secunderabad RP Road Zone', serviceable: true, oneDayEligible: false, primaryWarehouse: 'WH-HYD-005', standardTransitDays: 2 },
+  '500003': { pincode: '500003', city: 'Hyderabad', state: 'Telangana', latitude: 17.4399, longitude: 78.4983, zoneName: 'Secunderabad RP Road Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-005', standardTransitDays: 2 },
   '500016': { pincode: '500016', city: 'Hyderabad', state: 'Telangana', latitude: 17.4448, longitude: 78.4661, zoneName: 'Begumpet Airport Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-006', standardTransitDays: 2 },
 
   // Kukatpally / Miyapur

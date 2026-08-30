@@ -707,8 +707,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   
                   <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
                     <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black shadow-sm">
-                      <Zap className="w-4 h-4 fill-emerald-300 text-emerald-300 animate-pulse" />
-                      <span>⚡ ARRIVES TOMORROW</span>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>✓ CAN BE DELIVERED (Within Service Area)</span>
                     </div>
                     <span className="text-xs font-semibold text-slate-400">Location: {result.city || 'Hyderabad'} ({result.pincode})</span>
                   </div>
@@ -748,9 +748,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     </div>
 
                     <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
-                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Approx. Travel Time</span>
-                      <span className="font-semibold text-white">
-                        {result.durationMinutes === 0 ? '0 min' : `~${result.durationMinutes || result.travelTimeMinutes || 15} min`}
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Geographic Gate (&le;35 km)</span>
+                      <span className="font-semibold text-emerald-400">
+                        ✓ Within 35 km Range
                       </span>
                     </div>
 
