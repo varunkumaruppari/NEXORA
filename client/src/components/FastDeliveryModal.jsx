@@ -103,11 +103,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
     setSelectedLocation(mapLocObj);
     setErrorMsg(null);
-    setResult(null); // Invalidate previous result
-    handleCheckDelivery(pincode, address, quantity, mapLocObj);
+    setResult(null); // Invalidate previous result; user must click Check Availability
   };
 
-  // Real Leaflet + OpenStreetMap Map Tile Initialization
   useEffect(() => {
     if (!isOpen || !mapContainerRef.current) return;
 
@@ -120,9 +118,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           attributionControl: false,
         });
 
-        // CARTO Voyager Basemap Tile Layer (CARTO Open Basemap specification)
         const cartoTileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-
         L.tileLayer(cartoTileUrl, {
           maxZoom: 19,
           subdomains: 'abcd',
@@ -137,7 +133,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       const layerGroup = markersLayerRef.current;
       if (!map || !layerGroup) return;
 
-      // Register map click listener for Phase 15A Location Selection
       map.off('click');
       map.on('click', (e) => {
         if (e && e.latlng) {
@@ -164,50 +159,51 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
       const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
 
-      // 1. Render Blue OSRM Road Polyline FIRST (Layer hierarchy: vector line in overlayPane beneath markers)
       if (result && result.eligible && activeCustLat != null && activeCustLng != null && result.warehouseLatitude != null && result.warehouseLongitude != null) {
         const whLat = Number(result.warehouseLatitude);
         const whLng = Number(result.warehouseLongitude);
 
-        const roadGeom = (result.route?.geometry && result.route.geometry.length > 0)
+        const rawRoadGeom = (result.route?.geometry && result.route.geometry.length > 0)
           ? result.route.geometry
           : (result.routeGeometry && result.routeGeometry.length > 0)
             ? result.routeGeometry
             : [[whLat, whLng], [activeCustLat, activeCustLng]];
 
-        // Render PROMINENT Blue Real OSRM Road Polyline (Req 1: #2563eb, weight 5, opacity 0.95, solid line)
-        L.polyline(roadGeom, {
-          color: '#2563eb',
-          weight: 5,
-          opacity: 0.95,
-          lineCap: 'round',
-          lineJoin: 'round',
-          dashArray: undefined,
-        }).addTo(layerGroup);
+        const roadGeom = rawRoadGeom.filter(
+          (pt) => Array.isArray(pt) && pt.length >= 2 && !isNaN(pt[0]) && !isNaN(pt[1])
+        );
 
-        // Calculate midpoint of actual OSRM geometry array (Req 5)
-        const midIndex = Math.floor(roadGeom.length / 2);
-        const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
+        if (roadGeom.length >= 2) {
+          L.polyline(roadGeom, {
+            color: '#2563eb',
+            weight: 6,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+            dashArray: undefined,
+          }).addTo(layerGroup);
 
-        const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
-        const durText = (result.durationMinutes || result.travelTimeMinutes) ? ` • ~${result.durationMinutes || result.travelTimeMinutes} min` : '';
+          const midIndex = Math.floor(roadGeom.length / 2);
+          const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
 
-        const badgeIcon = L.divIcon({
-          html: `<div style="padding:4px 10px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1.5px solid #2563eb; font-size:11px; font-weight:900; color:#93c5fd; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.7); display:flex; align-items:center; gap:4px;">🔵 ${distText}${durText}</div>`,
-          className: 'leaflet-custom-badge',
-          iconSize: [140, 26],
-          iconAnchor: [70, 13],
-        });
+          const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
+          const durText = (result.durationMinutes || result.travelTimeMinutes) ? ` • ~${result.durationMinutes || result.travelTimeMinutes} min` : '';
 
-        L.marker(midPoint, { icon: badgeIcon, zIndexOffset: 1200 }).addTo(layerGroup);
+          const badgeIcon = L.divIcon({
+            html: `<div style="padding:4px 10px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1.5px solid #2563eb; font-size:11px; font-weight:900; color:#93c5fd; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.7); display:flex; align-items:center; gap:4px;">🔵 ${distText}${durText}</div>`,
+            className: 'leaflet-custom-badge',
+            iconSize: [140, 26],
+            iconAnchor: [70, 13],
+          });
 
-        // Include route points and endpoints in focused bounds calculation (Req 6)
+          L.marker(midPoint, { icon: badgeIcon, zIndexOffset: 1200 }).addTo(layerGroup);
+        }
+
         boundsPoints.push([whLat, whLng]);
         boundsPoints.push([activeCustLat, activeCustLng]);
         roadGeom.forEach(([rLat, rLng]) => boundsPoints.push([rLat, rLng]));
       }
 
-      // 2. Render Warehouse Markers (Only selected warehouse receives prominent label, unselected get small clean status dots)
       hubsToRender.forEach((hub) => {
         if (!hub.latitude || !hub.longitude) return;
         const isSelected = result?.warehouseId === hub.warehouseId;
@@ -216,7 +212,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         }
 
         const iconHtml = isSelected
-          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:11px; padding:4px 10px; border-radius:8px; border:2px solid #fff; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.8); display:flex; align-items:center; gap:4px;">🏭 ${result?.warehouseName || hub.name}</div>`
+          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:11px; padding:4px 10px; border-radius:8px; border:2px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,0.8); display:flex; align-items:center; gap:4px;">🏭 ${result?.warehouseName || hub.name}</div>`
           : `<div style="width:12px; height:12px; border-radius:50%; border:2px solid #020617; background:${
               hub.status === 'AVAILABLE' ? '#10b981' : hub.status === 'CONSTRAINED' ? '#f59e0b' : '#ef4444'
             }; box-shadow:0 2px 4px rgba(0,0,0,0.6); cursor:pointer;"></div>`;
@@ -242,7 +238,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         }
       });
 
-      // 3. Render Customer Marker (📍 YOU) at exact customer coordinates with highest z-index (Req 4: zIndexOffset: 2000)
       if (activeCustLat != null && activeCustLng != null) {
         if (!result || !result.eligible) {
           boundsPoints.push([activeCustLat, activeCustLng]);
@@ -270,19 +265,16 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         `);
       }
 
-      // 4. Auto-Fit Map Bounds (Req 6)
       if (boundsPoints.length > 0) {
         const paddingAmount = result && result.eligible ? [50, 50] : [35, 35];
-        map.fitBounds(L.latLngBounds(boundsPoints), { padding: paddingAmount, maxZoom: 16 });
+        map.fitBounds(L.latLngBounds(boundsPoints), { padding: paddingAmount, maxZoom: 15 });
       }
 
-      setTimeout(() => map?.invalidateSize(), 250);
+      setTimeout(() => map?.invalidateSize(), 200);
     } catch (e) {
       console.warn('Leaflet map initialization fallback:', e);
     }
   }, [isOpen, result, selectedLocation]);
-
-  if (!isOpen || !product) return null;
 
   const handleCheckDelivery = async (pinToCheck = pincode, addressToCheck = address, qtyToCheck = quantity, customLocObj = selectedLocation) => {
     const cleanPin = String(pinToCheck || '').trim();
@@ -367,7 +359,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           address: 'Current GPS Location, Hyderabad',
         };
         setSelectedLocation(gpsLocObj);
-        handleCheckDelivery(pincode, address, quantity, gpsLocObj);
       },
       (err) => {
         setGeoLocating(false);
@@ -380,14 +371,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   const handleSelectSample = (samplePin) => {
     setPincode(samplePin);
     setAddress('');
-    handleCheckDelivery(samplePin, '', quantity);
+    setSelectedLocation(null);
+    setResult(null);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
         
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-800/80 bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
@@ -409,10 +400,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           </button>
         </div>
 
-        {/* Modal Body */}
         <div className="p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1 pb-6">
           
-          {/* Product Summary */}
           <div className="flex items-center space-x-4 p-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50">
             <img
               src={product.image}
@@ -428,7 +417,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             </div>
           </div>
 
-          {/* Location & Input Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -446,7 +434,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {/* PIN Code */}
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 w-4 h-4 text-amber-400" />
                 <input
@@ -459,7 +446,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 />
               </div>
 
-              {/* Address / Landmark */}
               <div className="relative col-span-1 sm:col-span-2">
                 <Compass className="absolute left-3 top-3 w-4 h-4 text-indigo-400" />
                 <input
@@ -473,17 +459,12 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-1">
-              {/* Quantity Selection */}
               <div className="flex items-center space-x-2 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5">
                 <span className="text-xs text-slate-400 font-medium">Quantity:</span>
                 <select
                   value={quantity}
                   onChange={(e) => {
-                    const q = Number(e.target.value);
-                    setQuantity(q);
-                    if (result || selectedLocation || pincode || address) {
-                      handleCheckDelivery(pincode, address, q);
-                    }
+                    setQuantity(Number(e.target.value));
                   }}
                   className="bg-transparent text-sm font-bold text-white focus:outline-none"
                 >
@@ -507,7 +488,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
             {errorMsg && <p className="text-xs text-rose-400 font-medium">{errorMsg}</p>}
 
-            {/* Quick Sample Location Pills */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               <span className="text-[11px] text-slate-400 font-medium mr-1">Sample Zones:</span>
               {SAMPLE_PINCODES.map((item) => (
@@ -526,9 +506,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             </div>
           </div>
 
-          {/* Hyderabad Geographic Fulfillment Network Map Component */}
-          <div className="relative h-48 sm:h-52 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden p-2.5 flex flex-col justify-between shadow-inner shrink-0">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 z-10 bg-slate-950/80 px-2 py-1 rounded-lg backdrop-blur-sm">
+          <div className="relative h-48 sm:h-52 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden p-2 flex flex-col justify-between shadow-inner shrink-0">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 z-10 bg-slate-950/90 px-2.5 py-1 rounded-lg backdrop-blur-sm">
               <span className="flex items-center gap-1.5 text-white">
                 <Building2 className="w-3.5 h-3.5 text-amber-400" />
                 Real Hyderabad Geographic Fulfillment Map
@@ -540,140 +519,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
               </div>
             </div>
 
-            {/* Geographic Map Canvas with OpenStreetMap Backdrop & Real Landmarks */}
-            <div ref={mapContainerRef} className="relative flex-1 my-1 bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden z-0">
-              
-              {/* Geographic Tile Map Layer */}
-              <div className="absolute inset-0 opacity-30 bg-[radial-gradient(#475569_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none"></div>
-
-              {/* Geographic SVG Features: Lakes, ORR Outer Ring Road & Zone Labels */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-40">
-                {/* Outer Ring Road (ORR) Highway Loop */}
-                <ellipse cx="50%" cy="50%" rx="42%" ry="40%" fill="none" stroke="#475569" strokeWidth="1.5" strokeDasharray="6 3" />
-                {/* Hussain Sagar Lake */}
-                <ellipse cx="62%" cy="42%" rx="4%" ry="3%" fill="#1e3a8a" opacity="0.6" stroke="#3b82f6" strokeWidth="0.8" />
-                {/* Durgam Cheruvu Lake */}
-                <ellipse cx="38%" cy="41%" rx="2.5%" ry="2%" fill="#1e3a8a" opacity="0.6" stroke="#3b82f6" strokeWidth="0.8" />
-                {/* Geographic Region Labels */}
-                <text x="32%" y="38%" fill="#94a3b8" fontSize="9" fontWeight="bold">HITEC City</text>
-                <text x="22%" y="48%" fill="#94a3b8" fontSize="9" fontWeight="bold">Gachibowli</text>
-                <text x="65%" y="36%" fill="#94a3b8" fontSize="9" fontWeight="bold">Secunderabad</text>
-                <text x="75%" y="52%" fill="#94a3b8" fontSize="9" fontWeight="bold">Uppal</text>
-                <text x="44%" y="85%" fill="#94a3b8" fontSize="9" fontWeight="bold">Shamshabad</text>
-              </svg>
-
-              {/* Connecting Route Line if Result Available */}
-              {(() => {
-                if (!result || !result.eligible || result.customerLatitude == null || result.warehouseLatitude == null) return null;
-                const whPos = getMapPosition(result.warehouseLatitude, result.warehouseLongitude);
-                const custPos = getMapPosition(result.customerLatitude, result.customerLongitude);
-
-                return (
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-                    <line
-                      x1={`${whPos.x}%`}
-                      y1={`${whPos.y}%`}
-                      x2={`${custPos.x}%`}
-                      y2={`${custPos.y}%`}
-                      stroke="#2563eb"
-                      strokeWidth="4.5"
-                      strokeDasharray="none"
-                      className="opacity-95"
-                    />
-                    {/* Route Midpoint Distance Badge */}
-                    <foreignObject
-                      x={`${(whPos.x + custPos.x) / 2 - 15}%`}
-                      y={`${(whPos.y + custPos.y) / 2 - 5}%`}
-                      width="30%"
-                      height="24"
-                    >
-                      <div className="flex items-center justify-center">
-                        <span className="px-2.5 py-0.5 rounded-full bg-slate-900/95 border border-blue-500 text-[10px] font-black text-blue-300 shadow-md">
-                          🔵 {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
-                        </span>
-                      </div>
-                    </foreignObject>
-                  </svg>
-                );
-              })()}
-
-              {/* Render 10 Hyderabad Hub Markers at Real Mercator Geographic Positions */}
-              {(() => {
-                const hubsToRender = result?.allWarehouses || [
-                  { warehouseId: 'WH-HYD-001', name: 'NEXORA Gachibowli Hub', latitude: 17.4401, longitude: 78.3489, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-002', name: 'NEXORA HITEC City Express', latitude: 17.4435, longitude: 78.3772, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-003', name: 'NEXORA Madhapur Hub', latitude: 17.4483, longitude: 78.3915, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-004', name: 'NEXORA Kukatpally Depot', latitude: 17.4849, longitude: 78.4138, status: 'CONSTRAINED' },
-                  { warehouseId: 'WH-HYD-005', name: 'NEXORA Secunderabad Hub', latitude: 17.4399, longitude: 78.4983, status: 'UNAVAILABLE' },
-                  { warehouseId: 'WH-HYD-006', name: 'NEXORA Begumpet Hub', latitude: 17.4448, longitude: 78.4661, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-007', name: 'NEXORA Uppal East Hub', latitude: 17.4057, longitude: 78.5601, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-008', name: 'NEXORA LB Nagar Hub', latitude: 17.3457, longitude: 78.5522, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-009', name: 'NEXORA Mehdipatnam Hub', latitude: 17.3916, longitude: 78.4398, status: 'AVAILABLE' },
-                  { warehouseId: 'WH-HYD-010', name: 'NEXORA Shamshabad Hub', latitude: 17.2403, longitude: 78.4294, status: 'UNAVAILABLE' },
-                ];
-
-                return hubsToRender.map((hub) => {
-                  const pos = getMapPosition(hub.latitude, hub.longitude);
-                  const isSelected = result?.warehouseId === hub.warehouseId;
-
-                  return (
-                    <div
-                      key={hub.warehouseId}
-                      style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-                      className={`absolute transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer ${
-                        isSelected ? 'z-30' : 'z-20'
-                      }`}
-                    >
-                      <div
-                        className={`rounded-full border-2 border-slate-950 shadow-md transition-all ${
-                          isSelected
-                            ? 'w-4 h-4 bg-emerald-500 ring-4 ring-emerald-500/40 animate-pulse'
-                            : hub.status === 'AVAILABLE'
-                            ? 'w-3 h-3 bg-emerald-400'
-                            : hub.status === 'CONSTRAINED'
-                            ? 'w-3 h-3 bg-amber-400'
-                            : 'w-3 h-3 bg-rose-500'
-                        }`}
-                      ></div>
-                      <div
-                        className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-slate-900 text-[10px] font-bold rounded border whitespace-nowrap shadow-lg ${
-                          isSelected
-                            ? 'block text-emerald-300 border-emerald-500 z-30'
-                            : 'hidden group-hover:block text-white border-slate-700 z-20'
-                        }`}
-                      >
-                        {isSelected ? `🏭 ${result?.warehouseName || hub.name}` : hub.name}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-
-              {/* Customer Pin Marker at Exact Validated Coordinates ONLY if Location Exists */}
-              {(() => {
-                const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
-                const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
-                if (activeCustLat == null || activeCustLng == null) return null;
-                const custPos = getMapPosition(activeCustLat, activeCustLng);
-
-                return (
-                  <div
-                    style={{ left: `${custPos.x}%`, top: `${custPos.y}%` }}
-                    className="absolute transform -translate-x-1/2 -translate-y-1/2 z-25 flex items-center space-x-1"
-                  >
-                    <div className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-black text-[10px] shadow-lg shadow-amber-500/60 animate-bounce">
-                      📍
-                    </div>
-                    <span className="text-[10px] font-bold text-amber-300 bg-slate-900/90 px-1.5 py-0.5 rounded border border-amber-500/50 shadow">
-                      YOU
-                    </span>
-                  </div>
-                );
-              })()}
-            </div>
+            <div ref={mapContainerRef} className="relative flex-1 w-full h-full bg-slate-950 rounded-xl overflow-hidden z-0" />
           </div>
 
-          {/* Delivery Availability Result Box */}
           <div className="space-y-4">
             {loading ? (
               <div className="p-6 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col items-center justify-center text-center space-y-3 py-8">
@@ -689,10 +537,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
               </div>
             ) : result ? (
               result.eligible ? (
-                /* ONE-DAY DELIVERY AVAILABLE SUCCESS BOX (PHASE 15F SUCCESS STATE) */
                 <div className="p-5 rounded-2xl bg-gradient-to-b from-emerald-950/40 to-slate-950 border border-emerald-500/40 space-y-4 shadow-xl">
                   
-                  {/* Badge & Title */}
                   <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
                     <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black shadow-sm">
                       <Zap className="w-4 h-4 fill-emerald-300 text-emerald-300 animate-pulse" />
@@ -701,7 +547,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     <span className="text-xs font-semibold text-slate-400">Location: {result.city || 'Hyderabad'} ({result.pincode})</span>
                   </div>
 
-                  {/* Delivery Promise Specs Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-emerald-500/20">
                       <div className="flex items-center space-x-1.5 text-[11px] font-medium text-slate-400">
@@ -728,7 +573,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     </div>
                   </div>
 
-                  {/* Road Distance, Agent & Demand Specs */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1">
                     <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">Road Distance</span>
@@ -754,7 +598,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     )}
                   </div>
 
-                  {/* Fulfillment Hub Info */}
                   {result.warehouseName && (
                     <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
                       <div className="flex items-center space-x-2">
@@ -767,14 +610,28 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     </div>
                   )}
 
-                  {/* Explanation */}
+                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-emerald-500/20 text-xs space-y-2">
+                    <span className="text-[11px] uppercase font-bold text-emerald-400 block tracking-wider">
+                      ✓ WHY ONE-DAY DELIVERY IS AVAILABLE
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-slate-300">
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Stock Available</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Hub Open</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Real OSRM Route</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Range (&le;35 km)</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Agent Available</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Agent Capacity</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Hub Capacity</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Before Cutoff</span>
+                    </div>
+                  </div>
+
                   <div className="flex items-start space-x-2 text-xs text-emerald-200/90 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                     <span>{result.customerMessage}</span>
                   </div>
                 </div>
               ) : (
-                /* FAST DELIVERY UNAVAILABLE CARD (PHASE 15F INELIGIBLE STATE) */
                 <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 space-y-4 shadow-xl">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                     <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-amber-400 text-xs font-bold">
@@ -784,7 +641,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     <span className="text-xs font-semibold text-slate-400">PIN: {result.pincode}</span>
                   </div>
 
-                  {/* Standard Fallback Notice */}
                   {result.deliveryType === 'STANDARD' && (
                     <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
                       <div className="flex items-center space-x-2 text-amber-300 font-bold">
@@ -799,7 +655,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     </div>
                   )}
 
-                  {/* Specific Ineligibility Reason Banner */}
                   <div className="flex items-start space-x-2 text-xs text-slate-300 bg-slate-900 p-3 rounded-xl border border-slate-800">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <div>
@@ -812,7 +667,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 </div>
               )
             ) : !selectedLocation ? (
-              /* STATE 1: NO LOCATION SELECTED INITIAL PROMPT */
               <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col items-center justify-center text-center space-y-2 py-6">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
                   <MapPin className="w-5 h-5" />
@@ -823,7 +677,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 </p>
               </div>
             ) : (
-              /* STATE 2: LOCATION SELECTED (AWAITING CHECK) */
               <div className="p-4 rounded-2xl bg-slate-950/60 border border-indigo-500/30 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300">
@@ -847,7 +700,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-800/80 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-[11px] text-slate-400">
             <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
@@ -866,4 +718,3 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     </div>
   );
 }
-
