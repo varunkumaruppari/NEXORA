@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import healthRoutes from './routes/healthRoutes.js';
 import caseRoutes from './routes/caseRoutes.js';
+import deliveryRoutes from './routes/deliveryRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -32,6 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api', healthRoutes);
 app.use('/api/cases', caseRoutes);
+app.use('/api/delivery', deliveryRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {

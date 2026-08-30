@@ -5,6 +5,7 @@ import {
   MOCK_ORDERS,
   MARKETPLACE_CATEGORIES
 } from '../data/mockData';
+import FastDeliveryModal from '../components/FastDeliveryModal';
 import {
   ShoppingBag,
   Package,
@@ -31,6 +32,7 @@ export default function MarketplacePage() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [fastDeliveryProduct, setFastDeliveryProduct] = useState(null);
 
   // Filter products by category and search
   const filteredProducts = MOCK_PRODUCTS.filter((product) => {
@@ -249,10 +251,13 @@ export default function MarketplacePage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1">
-                      <Truck className="w-3.5 h-3.5" />
-                      <span>{product.deliveryInfo}</span>
-                    </span>
+                    <button
+                      onClick={() => setFastDeliveryProduct(product)}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 transition-all flex items-center space-x-1 shadow-sm"
+                    >
+                      <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+                      <span>Check Fast Delivery</span>
+                    </button>
                   </div>
 
                   {/* Actions */}
@@ -293,13 +298,21 @@ export default function MarketplacePage() {
 
       </main>
 
+      {/* FAST DELIVERY CHECKER MODAL */}
+      <FastDeliveryModal
+        isOpen={!!fastDeliveryProduct}
+        onClose={() => setFastDeliveryProduct(null)}
+        product={fastDeliveryProduct}
+        defaultPincode="500081"
+      />
+
       {/* 3. FOOTER */}
       <footer className="mt-20 border-t border-slate-800/80 bg-slate-950 py-8 px-4 text-center text-xs text-slate-400 space-y-2">
         <p className="font-semibold text-slate-300">
-          NEXORA Marketplace • Powered by RESOLV AI Autonomous Returns Resolution
+          NEXORA Marketplace • Powered by RESOLV AI Autonomous Returns & Fast Delivery Intelligence
         </p>
         <p className="text-[11px]">
-          Demo environment for Hackathon Presentation. Integrated with 7-Agent Backend Engine.
+          Demo environment for Hackathon Presentation. Integrated with 7-Agent Backend Engine & Deterministic Fast Delivery Pipeline.
         </p>
       </footer>
 

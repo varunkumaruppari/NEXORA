@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MOCK_ORDERS, MOCK_PRODUCTS } from '../data/mockData';
+import FastDeliveryModal from '../components/FastDeliveryModal';
 import {
   Package,
   CheckCircle2,
@@ -15,7 +16,8 @@ import {
   ChevronRight,
   Bot,
   AlertTriangle,
-  Info
+  Info,
+  Zap
 } from 'lucide-react';
 
 export default function OrderDetailsPage() {
@@ -27,8 +29,11 @@ export default function OrderDetailsPage() {
     (o) => o.orderId.toUpperCase() === (orderId || '').toUpperCase()
   ) || MOCK_ORDERS[0];
 
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+
   // Associated product specs
-  const productSpecs = MOCK_PRODUCTS.find((p) => p.name === order.productName)?.specs || {};
+  const matchedProduct = MOCK_PRODUCTS.find((p) => p.name === order.productName) || MOCK_PRODUCTS[0];
+  const productSpecs = matchedProduct?.specs || {};
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 lg:px-8">
@@ -132,10 +137,19 @@ export default function OrderDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               
               {/* Shipping Address Card */}
-              <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-2">
-                <div className="flex items-center space-x-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                  <MapPin className="w-4 h-4 text-cyan-400" />
-                  <span>Shipping Address</span>
+              <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                    <MapPin className="w-4 h-4 text-cyan-400" />
+                    <span>Shipping Address</span>
+                  </div>
+                  <button
+                    onClick={() => setIsDeliveryModalOpen(true)}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 transition-all flex items-center space-x-1"
+                  >
+                    <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+                    <span>Check 1-Day Delivery</span>
+                  </button>
                 </div>
                 <p className="font-bold text-sm text-white">{order.shippingAddress.name || order.customerName}</p>
                 <p className="text-xs text-slate-300">{order.shippingAddress.street}</p>
@@ -247,6 +261,14 @@ export default function OrderDetailsPage() {
         </div>
 
       </div>
+
+      {/* FAST DELIVERY MODAL */}
+      <FastDeliveryModal
+        isOpen={isDeliveryModalOpen}
+        onClose={() => setIsDeliveryModalOpen(false)}
+        product={matchedProduct}
+        defaultPincode={order.shippingAddress?.pincode || '500081'}
+      />
     </div>
   );
 }
