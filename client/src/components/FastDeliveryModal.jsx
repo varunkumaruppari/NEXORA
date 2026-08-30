@@ -106,11 +106,45 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     setResult(null); // Invalidate previous result; user must click Check Availability
   };
 
+  // Cleanup Leaflet map instance on modal unmount
   useEffect(() => {
-    if (!isOpen || !mapContainerRef.current) return;
+    return () => {
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {
+          console.warn('Leaflet map cleanup error:', e);
+        }
+        mapInstanceRef.current = null;
+        markersLayerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Real Leaflet + OpenStreetMap Map Tile Initialization & Rendering
+  useEffect(() => {
+    if (!isOpen) {
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {
+          console.warn('Leaflet map removal error:', e);
+        }
+        mapInstanceRef.current = null;
+        markersLayerRef.current = null;
+      }
+      return;
+    }
+
+    if (!mapContainerRef.current) return;
 
     try {
       if (!mapInstanceRef.current) {
+        // Reset container DOM pointer if previously assigned to prevent duplicate init crash
+        if (mapContainerRef.current._leaflet_id) {
+          mapContainerRef.current._leaflet_id = null;
+        }
+
         const map = L.map(mapContainerRef.current, {
           center: [17.4435, 78.3772],
           zoom: 12,
