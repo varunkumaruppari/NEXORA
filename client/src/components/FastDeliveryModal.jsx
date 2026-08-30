@@ -70,6 +70,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   const locationReqId = useRef(0);
   const routeReqId = useRef(0);
   const deliveryCheckReqId = useRef(0);
+  const resultRef = useRef(null);
 
   const isValidCoordinate = (lat, lng) => {
     return (
@@ -139,6 +140,13 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       setQuantity(1);
     }
   }, [isOpen, product?.id, defaultPincode]);
+
+  // Auto-scroll result card into view when check completes
+  useEffect(() => {
+    if (result && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [result]);
 
   // Phase 16D Real OSRM Road Route Engine Trigger
   useEffect(() => {
@@ -760,7 +768,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             <div ref={mapContainerRef} className="relative flex-1 w-full h-full bg-slate-950 rounded-xl overflow-hidden z-0" />
           </div>
 
-          <div className="space-y-4">
+          <div ref={resultRef} className="space-y-4">
             {loading ? (
               <div className="p-6 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col items-center justify-center text-center space-y-3 py-8">
                 <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
