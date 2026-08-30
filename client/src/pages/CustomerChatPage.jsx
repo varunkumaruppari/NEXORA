@@ -340,7 +340,8 @@ export default function CustomerChatPage() {
       console.warn('Vite proxy request failed, attempting direct backend connection...', primaryError.message);
       try {
         // Direct backend fallback call
-        const directResponse = await axios.post('http://localhost:5001/api/cases/analyze', {
+        const directBase = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+        const directResponse = await axios.post(`${directBase}/cases/analyze`, {
           message: trimmed,
           orderId: effectiveOrderId,
           returnReason: effectiveReason,

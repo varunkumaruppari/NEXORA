@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 
 /**
  * Connect to MongoDB instance using Mongoose.
@@ -12,6 +13,13 @@ export const connectDB = async () => {
     return false;
   }
 
+  // Ensure SRV DNS records resolve reliably across Windows local networks and cloud environments
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (dnsErr) {
+    // Ignore DNS override if custom environment prohibits it
+  }
+
   try {
     const conn = await mongoose.connect(mongoURI);
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
@@ -22,3 +30,4 @@ export const connectDB = async () => {
     return false;
   }
 };
+
