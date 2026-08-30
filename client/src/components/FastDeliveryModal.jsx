@@ -13,9 +13,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
-  ShieldCheck,
-  Navigation,
-  Compass
+  ShieldCheck
 } from 'lucide-react';
 import API from '../services/api';
 
@@ -51,14 +49,12 @@ function getMapPosition(lat, lon) {
 
 export default function FastDeliveryModal({ isOpen, onClose, product, defaultPincode = '', onDeliveryCheckResult = null }) {
   const [pincode, setPincode] = useState('');
-  const [address, setAddress] = useState('');
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [geoLocating, setGeoLocating] = useState(false);
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -136,7 +132,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       setRouteState('IDLE');
       setErrorMsg(null);
       setPincode(defaultPincode || '');
-      setAddress('');
       setQuantity(1);
     }
   }, [isOpen, product?.id, defaultPincode]);
@@ -205,17 +200,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     locationReqId.current += 1;
     routeReqId.current += 1;
     setPincode(newPin);
-    setSelectedLocation(null);
-    setResult(null);
-    setActiveRoute(null);
-    setRouteState('IDLE');
-    setErrorMsg(null);
-  };
-
-  const handleAddressChange = (newAddress) => {
-    locationReqId.current += 1;
-    routeReqId.current += 1;
-    setAddress(newAddress);
     setSelectedLocation(null);
     setResult(null);
     setActiveRoute(null);
@@ -500,9 +484,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     ENGINE_ERROR: "Unable to verify fast delivery right now. Please try again."
   };
 
-  const handleCheckDelivery = async (pinToCheck = pincode, addressToCheck = address, qtyToCheck = quantity, customLocObj = selectedLocation) => {
+  const handleCheckDelivery = async (pinToCheck = pincode, qtyToCheck = quantity, customLocObj = selectedLocation) => {
     const cleanPin = String(pinToCheck || '').trim();
-    if (!cleanPin && !addressToCheck && (!customLocObj || customLocObj.latitude == null)) {
+    if (!cleanPin && (!customLocObj || customLocObj.latitude == null)) {
       setErrorMsg('Please select a location on the map or enter a valid 6-digit PIN code.');
       setResult(null);
       return;
@@ -521,7 +505,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     try {
       const locationPayload = customLocObj?.latitude != null
         ? customLocObj
-        : (addressToCheck ? { address: addressToCheck, pincode: cleanPin } : { pincode: cleanPin });
+        : { pincode: cleanPin };
 
       const response = await API.post('/delivery/check', {
         productId: product.id || 'PROD-1001',
@@ -544,7 +528,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
               latitude: resLat,
               longitude: resLng,
               source: response.data.locationSource || 'PIN',
-              address: addressToCheck || `Resolved Location (${response.data.pincode || cleanPin})`,
+              address: `Resolved Location (${response.data.pincode || cleanPin})`,
               requestId: locationReqId.current,
             });
           }
@@ -573,52 +557,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     }
   };
 
-  const handleUseMyLocation = () => {
-    if (!navigator.geolocation) {
-      setErrorMsg('Geolocation is not supported by your browser.');
-      return;
-    }
-
-    setGeoLocating(true);
-    setErrorMsg(null);
-    setResult(null);
-
-    locationReqId.current += 1;
-    const currentReqId = locationReqId.current;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setGeoLocating(false);
-        if (currentReqId !== locationReqId.current) return;
-
-        const { latitude, longitude } = position.coords;
-        if (!isValidCoordinate(latitude, longitude)) {
-          setErrorMsg('Invalid GPS coordinates received.');
-          return;
-        }
-
-        const gpsLocObj = {
-          latitude: Number(latitude),
-          longitude: Number(longitude),
-          source: 'GPS',
-          address: 'Current GPS Location, Hyderabad',
-          requestId: currentReqId,
-        };
-        setSelectedLocation(gpsLocObj);
-      },
-      (err) => {
-        setGeoLocating(false);
-        if (currentReqId !== locationReqId.current) return;
-        setErrorMsg('Location permission denied or unavailable. Please enter PIN code manually.');
-      },
-      { timeout: 8000 }
-    );
-  };
-
   const handleSelectSample = (samplePin) => {
     locationReqId.current += 1;
     setPincode(samplePin);
-    setAddress('');
     setSelectedLocation(null);
     setResult(null);
     setErrorMsg(null);
@@ -667,44 +608,20 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Where should we deliver?
-              </label>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Where should we deliver?
+            </label>
 
-              <button
-                onClick={handleUseMyLocation}
-                disabled={geoLocating || loading}
-                className="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
-              >
-                {geoLocating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />}
-                <span>📍 Use My Location</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 w-4 h-4 text-amber-400" />
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={pincode}
-                  onChange={(e) => handlePincodeChange(e.target.value.replace(/\D/g, ''))}
-                  placeholder="6-Digit PIN"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div className="relative col-span-1 sm:col-span-2">
-                <Compass className="absolute left-3 top-3 w-4 h-4 text-indigo-400" />
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => handleAddressChange(e.target.value)}
-                  placeholder="Address or Landmark (e.g. HITEC City)"
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-3 w-4 h-4 text-amber-400" />
+              <input
+                type="text"
+                maxLength={6}
+                value={pincode}
+                onChange={(e) => handlePincodeChange(e.target.value.replace(/\D/g, ''))}
+                placeholder="6-Digit PIN (e.g. 500081)"
+                className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-1">
@@ -726,7 +643,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
               </div>
 
               <button
-                onClick={() => handleCheckDelivery(pincode, address, quantity, selectedLocation)}
+                onClick={() => handleCheckDelivery(pincode, quantity, selectedLocation)}
                 disabled={loading}
                 className="px-6 py-2 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-2 disabled:opacity-50"
               >
@@ -743,10 +660,10 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 <button
                   key={item.pin}
                   onClick={() => handleSelectSample(item.pin)}
-                  className={`px-2 py-0.5 rounded-lg text-xs font-semibold border transition-all ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
                     pincode === item.pin && result
-                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                      : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:text-slate-200'
+                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow'
+                      : 'bg-slate-800/60 border-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-800'
                   }`}
                 >
                   {item.city} ({item.pin})
