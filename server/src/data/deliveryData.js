@@ -189,6 +189,7 @@ export const PRODUCT_INVENTORY = {
       'WH-BLR': { quantity: 40, reservedQuantity: 5, stock: 35, oneDay: true },
       'WH-MUM': { quantity: 15, reservedQuantity: 0, stock: 15, oneDay: false },
       'WH-DEL': { quantity: 10, reservedQuantity: 1, stock: 9, oneDay: true },
+      'WH-CLOSED': { quantity: 10, reservedQuantity: 0, stock: 10, oneDay: true },
     },
   },
   'PROD-1002': { // Premium Phone Case

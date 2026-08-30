@@ -78,7 +78,33 @@ export const checkDeliveryEligibility = async ({
     // -------------------------------------------------------------
     // STEP 2: Quantity Validity Check
     // -------------------------------------------------------------
-    if (isNaN(qty) || qty <= 0) {
+    if (typeof quantity === 'number' && (!Number.isInteger(quantity) || quantity <= 0)) {
+      return recordAndReturn({
+        auditId,
+        productId,
+        requestedQuantity: quantity,
+        pincode: pincode || 'UNKNOWN',
+        eligible: false,
+        deliveryType: 'NONE',
+        reasonCode: 'INVALID_QUANTITY',
+        customerMessage: REASON_MESSAGES.INVALID_QUANTITY,
+      });
+    }
+
+    if (typeof quantity === 'string' && (quantity.includes('.') || isNaN(Number(quantity)))) {
+      return recordAndReturn({
+        auditId,
+        productId,
+        requestedQuantity: quantity,
+        pincode: pincode || 'UNKNOWN',
+        eligible: false,
+        deliveryType: 'NONE',
+        reasonCode: 'INVALID_QUANTITY',
+        customerMessage: REASON_MESSAGES.INVALID_QUANTITY,
+      });
+    }
+
+    if (isNaN(qty) || qty <= 0 || !Number.isFinite(qty)) {
       return recordAndReturn({
         auditId,
         productId,
@@ -471,13 +497,13 @@ async function recordAndReturn(data) {
         pincode: data.pincode,
         eligible: data.eligible,
         deliveryType: data.deliveryType,
-        estimatedDeliveryDate: data.estimatedDeliveryDate || null,
+        estimatedDeliveryDate: data.estimatedDeliveryDate ?? null,
         warehouseId: data.warehouseInfo?.warehouseId || data.warehouseId || null,
-        distanceKm: data.distanceKm || null,
+        distanceKm: data.distanceKm ?? null,
         agentId: data.agentId || null,
         demandLevel: data.demandLevel || null,
-        fastDeliveryFee: data.fastDeliveryFee || null,
-        travelTimeMinutes: data.travelTimeMinutes || null,
+        fastDeliveryFee: data.fastDeliveryFee ?? null,
+        travelTimeMinutes: data.travelTimeMinutes ?? null,
         operatingHoursStatus: data.operatingHoursStatus || null,
         reasonCode: data.reasonCode,
         customerMessage: data.customerMessage,
@@ -498,21 +524,21 @@ async function recordAndReturn(data) {
     pincode: data.pincode,
     eligible: data.eligible,
     deliveryType: data.deliveryType,
-    estimatedDeliveryDate: data.estimatedDeliveryDate || null,
-    fastestAvailableDays: data.fastestAvailableDays || null,
+    estimatedDeliveryDate: data.estimatedDeliveryDate ?? null,
+    fastestAvailableDays: data.fastestAvailableDays ?? null,
     cutoffTime: data.cutoffTime || null,
     cutoffFormatted: data.cutoffFormatted || null,
     minutesUntilCutoff: data.minutesUntilCutoff ?? null,
     capacityStatus: data.capacityStatus || null,
-    distanceKm: data.distanceKm || null,
+    distanceKm: data.distanceKm ?? null,
     agentId: data.agentId || null,
     demandLevel: data.demandLevel || null,
-    fastDeliveryFee: data.fastDeliveryFee || null,
-    travelTimeMinutes: data.travelTimeMinutes || null,
+    fastDeliveryFee: data.fastDeliveryFee ?? null,
+    travelTimeMinutes: data.travelTimeMinutes ?? null,
     operatingHoursStatus: data.operatingHoursStatus || null,
     reasonCode: data.reasonCode,
     customerMessage: data.customerMessage,
-    warehouseInfo: data.warehouseInfo || null,
+    warehouseInfo: data.warehouseInfo || (data.warehouseId ? { warehouseId: data.warehouseId } : null),
   };
 }
 
