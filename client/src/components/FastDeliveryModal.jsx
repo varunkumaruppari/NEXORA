@@ -557,10 +557,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     } finally {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
-      if (currentCheckReqId === deliveryCheckReqId.current) {
-        setLoading(false);
-        setLoadingStep(0);
-      }
+      setLoading(false);
+      setLoadingStep(0);
     }
   };
 
@@ -717,7 +715,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
               </div>
 
               <button
-                onClick={() => handleCheckDelivery(pincode, address, quantity)}
+                onClick={() => handleCheckDelivery(pincode, address, quantity, selectedLocation)}
                 disabled={loading}
                 className="px-6 py-2 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 transition-all flex items-center space-x-2 disabled:opacity-50"
               >
