@@ -208,7 +208,10 @@ export async function checkDeliveryEligibility(options = {}) {
       }
     }
 
-    // Calculate real road distance and travel time via route service
+    let routeGeometry = [];
+    let routeProvider = 'NONE';
+
+    // Calculate real road distance, travel time, and road geometry via route service
     if (selectedWarehouse && geocodeResult.latitude && geocodeResult.longitude) {
       const routeResult = await calculateRoute(
         { latitude: selectedWarehouse.latitude, longitude: selectedWarehouse.longitude },
@@ -217,6 +220,8 @@ export async function checkDeliveryEligibility(options = {}) {
       distanceKm = routeResult.distanceKm;
       durationMinutes = routeResult.durationMinutes;
       distanceType = routeResult.distanceType || 'ROAD';
+      routeGeometry = routeResult.geometry || [];
+      routeProvider = routeResult.provider || 'OSRM_ROUTING_ENGINE';
     } else {
       distanceKm = 14.2;
       durationMinutes = 45;
@@ -516,6 +521,8 @@ export async function checkDeliveryEligibility(options = {}) {
       customerLatitude: geocodeResult.latitude,
       customerLongitude: geocodeResult.longitude,
       locationSource: geocodeResult.source,
+      routeGeometry,
+      routeProvider,
       warehouseInfo: {
         warehouseId: selectedWarehouse.warehouseId,
         warehouseName: selectedWarehouse.name,
@@ -603,6 +610,14 @@ async function recordAndReturn(data) {
     distanceKm: data.distanceKm ?? null,
     distanceType: data.distanceType || 'ROAD',
     durationMinutes: data.travelTimeMinutes ?? data.durationMinutes ?? null,
+    routeGeometry: data.routeGeometry || data.geometry || null,
+    route: {
+      available: data.distanceKm != null,
+      source: data.routeProvider || 'OSRM',
+      distanceKm: data.distanceKm ?? null,
+      durationMinutes: data.travelTimeMinutes ?? data.durationMinutes ?? null,
+      geometry: data.routeGeometry || data.geometry || [],
+    },
     agentId: data.agentId || null,
     demandLevel: data.demandLevel || null,
     fee: data.fastDeliveryFee ?? null,

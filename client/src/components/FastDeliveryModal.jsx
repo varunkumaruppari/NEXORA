@@ -202,24 +202,36 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           const whLat = result.warehouseLatitude;
           const whLng = result.warehouseLongitude;
 
-          L.polyline([[whLat, whLng], [activeCustLat, activeCustLng]], {
-            color: '#10b981',
-            weight: 3.5,
-            dashArray: '6, 6',
+          const roadGeom = (result.route?.geometry && result.route.geometry.length > 0)
+            ? result.route.geometry
+            : (result.routeGeometry && result.routeGeometry.length > 0)
+              ? result.routeGeometry
+              : [[whLat, whLng], [activeCustLat, activeCustLng]];
+
+          // Render BLUE Real Road Polyline (Phase 15C)
+          L.polyline(roadGeom, {
+            color: '#3b82f6', // Distinct Vibrant Blue
+            weight: 4.5,
+            opacity: 0.85,
+            lineCap: 'round',
+            lineJoin: 'round',
           }).addTo(layerGroup);
 
-          const midLat = (whLat + activeCustLat) / 2;
-          const midLng = (whLng + activeCustLng) / 2;
+          // Determine midpoint for distance badge
+          const midIndex = Math.floor(roadGeom.length / 2);
+          const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
+
           const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
+          const durText = (result.durationMinutes || result.travelTimeMinutes) ? ` • ~${result.durationMinutes || result.travelTimeMinutes} min` : '';
 
           const badgeIcon = L.divIcon({
-            html: `<div style="padding:2px 8px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1px solid rgba(16,185,129,0.5); font-size:10px; font-weight:900; color:#6ee7b7; white-space:nowrap; box-shadow:0 4px 6px -1px rgba(0,0,0,0.5);">${distText}</div>`,
+            html: `<div style="padding:3px 9px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1.5px solid #3b82f6; font-size:10px; font-weight:900; color:#93c5fd; white-space:nowrap; box-shadow:0 4px 10px rgba(0,0,0,0.6);">🔵 ${distText}${durText}</div>`,
             className: 'leaflet-custom-badge',
-            iconSize: [80, 20],
-            iconAnchor: [40, 10],
+            iconSize: [120, 24],
+            iconAnchor: [60, 12],
           });
 
-          L.marker([midLat, midLng], { icon: badgeIcon }).addTo(layerGroup);
+          L.marker(midPoint, { icon: badgeIcon }).addTo(layerGroup);
         }
       }
 
