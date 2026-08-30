@@ -79,6 +79,46 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     );
   };
 
+  const calculateProximityKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const getCandidateWarehouse = (custLat, custLng, warehouses) => {
+    if (!isValidCoordinate(custLat, custLng) || !Array.isArray(warehouses) || warehouses.length === 0) {
+      return null;
+    }
+
+    const validCandidates = warehouses.filter(
+      (w) => w && isValidCoordinate(Number(w.latitude), Number(w.longitude))
+    );
+
+    if (validCandidates.length === 0) return null;
+
+    const ranked = validCandidates.map((w) => {
+      const prox = calculateProximityKm(custLat, custLng, Number(w.latitude), Number(w.longitude));
+      return { warehouse: w, proximityKm: prox };
+    });
+
+    ranked.sort((a, b) => {
+      if (Math.abs(a.proximityKm - b.proximityKm) > 0.0001) {
+        return a.proximityKm - b.proximityKm;
+      }
+      return String(a.warehouse.warehouseId).localeCompare(String(b.warehouse.warehouseId));
+    });
+
+    return ranked[0].warehouse;
+  };
+
   // Clean initial state on modal open: NO default location, NO 📍 YOU marker, NO auto-check
   useEffect(() => {
     if (isOpen) {
@@ -214,6 +254,13 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
       const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
 
+      // Phase 16C Candidate Warehouse Determination
+      let candidateWh = null;
+      if (activeCustLat != null && activeCustLng != null) {
+        candidateWh = getCandidateWarehouse(Number(activeCustLat), Number(activeCustLng), hubsToRender);
+      }
+      const activeSelectedWhId = result?.warehouseId || candidateWh?.warehouseId;
+
       if (result && result.eligible && activeCustLat != null && activeCustLng != null && result.warehouseLatitude != null && result.warehouseLongitude != null) {
         const whLat = Number(result.warehouseLatitude);
         const whLng = Number(result.warehouseLongitude);
@@ -261,7 +308,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
       hubsToRender.forEach((hub) => {
         if (!hub.latitude || !hub.longitude) return;
-        const isSelected = result?.warehouseId === hub.warehouseId;
+        const isSelected = activeSelectedWhId === hub.warehouseId;
         if (!result || !result.eligible) {
           boundsPoints.push([hub.latitude, hub.longitude]);
         }
