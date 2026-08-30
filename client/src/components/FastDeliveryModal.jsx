@@ -408,7 +408,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       hubsToRender.forEach((hub) => {
         if (!hub.latitude || !hub.longitude) return;
         const isSelected = activeSelectedWhId === hub.warehouseId;
-        if (!routeData && (!result || !result.eligible)) {
+        if (!activeCustLat) {
           boundsPoints.push([hub.latitude, hub.longitude]);
         }
 
@@ -444,15 +444,16 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         const cleanCustLat = Number(activeCustLat);
         const cleanCustLng = Number(activeCustLng);
 
-        if (!result || !result.eligible) {
-          boundsPoints.push([cleanCustLat, cleanCustLng]);
+        boundsPoints.push([cleanCustLat, cleanCustLng]);
+        if (candidateWh?.latitude && candidateWh?.longitude) {
+          boundsPoints.push([candidateWh.latitude, candidateWh.longitude]);
         }
 
         const custIcon = L.divIcon({
-          html: `<div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -100%);"><div style="background:#f59e0b; color:#020617; font-weight:900; font-size:11px; padding:3px 8px; border-radius:8px; border:2px solid #fff; box-shadow:0 4px 14px rgba(0,0,0,0.8); white-space:nowrap; margin-bottom:2px;">📍 YOU</div><div style="width:14px; height:14px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 0 12px #f59e0b;"></div></div>`,
+          html: `<div style="width:60px; height:32px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; pointer-events:auto;"><div style="background:#f59e0b; color:#020617; font-weight:900; font-size:11px; padding:2px 8px; border-radius:6px; border:1.5px solid #ffffff; box-shadow:0 2px 8px rgba(0,0,0,0.5); white-space:nowrap; line-height:14px; margin-bottom:2px;">📍 YOU</div><div style="width:8px; height:8px; border-radius:50%; background:#f59e0b; border:2px solid #ffffff; box-shadow:0 0 6px #f59e0b;"></div></div>`,
           className: 'leaflet-custom-cust',
-          iconSize: [60, 36],
-          iconAnchor: [30, 36],
+          iconSize: [60, 32],
+          iconAnchor: [30, 32],
         });
 
         const custMarker = L.marker([cleanCustLat, cleanCustLng], {
