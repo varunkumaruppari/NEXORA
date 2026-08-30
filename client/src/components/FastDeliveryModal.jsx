@@ -161,26 +161,78 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       ];
 
       const boundsPoints = [];
+      const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
+      const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
 
+      // 1. Render Blue OSRM Road Polyline FIRST (Layer hierarchy: vector line in overlayPane beneath markers)
+      if (result && result.eligible && activeCustLat != null && activeCustLng != null && result.warehouseLatitude != null && result.warehouseLongitude != null) {
+        const whLat = Number(result.warehouseLatitude);
+        const whLng = Number(result.warehouseLongitude);
+
+        const roadGeom = (result.route?.geometry && result.route.geometry.length > 0)
+          ? result.route.geometry
+          : (result.routeGeometry && result.routeGeometry.length > 0)
+            ? result.routeGeometry
+            : [[whLat, whLng], [activeCustLat, activeCustLng]];
+
+        // Render PROMINENT Blue Real OSRM Road Polyline (Req 1: #2563eb, weight 5, opacity 0.95, solid line)
+        L.polyline(roadGeom, {
+          color: '#2563eb',
+          weight: 5,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
+          dashArray: undefined,
+        }).addTo(layerGroup);
+
+        // Calculate midpoint of actual OSRM geometry array (Req 5)
+        const midIndex = Math.floor(roadGeom.length / 2);
+        const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
+
+        const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
+        const durText = (result.durationMinutes || result.travelTimeMinutes) ? ` • ~${result.durationMinutes || result.travelTimeMinutes} min` : '';
+
+        const badgeIcon = L.divIcon({
+          html: `<div style="padding:4px 10px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1.5px solid #2563eb; font-size:11px; font-weight:900; color:#93c5fd; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.7); display:flex; align-items:center; gap:4px;">🔵 ${distText}${durText}</div>`,
+          className: 'leaflet-custom-badge',
+          iconSize: [140, 26],
+          iconAnchor: [70, 13],
+        });
+
+        L.marker(midPoint, { icon: badgeIcon, zIndexOffset: 1200 }).addTo(layerGroup);
+
+        // Include route points and endpoints in focused bounds calculation (Req 6)
+        boundsPoints.push([whLat, whLng]);
+        boundsPoints.push([activeCustLat, activeCustLng]);
+        roadGeom.forEach(([rLat, rLng]) => boundsPoints.push([rLat, rLng]));
+      }
+
+      // 2. Render Warehouse Markers (Only selected warehouse receives prominent label, unselected get small clean status dots)
       hubsToRender.forEach((hub) => {
         if (!hub.latitude || !hub.longitude) return;
         const isSelected = result?.warehouseId === hub.warehouseId;
-        boundsPoints.push([hub.latitude, hub.longitude]);
+        if (!result || !result.eligible) {
+          boundsPoints.push([hub.latitude, hub.longitude]);
+        }
 
         const iconHtml = isSelected
-          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:10px; padding:3px 8px; border-radius:8px; border:1px solid #fff; white-space:nowrap; box-shadow:0 4px 10px rgba(0,0,0,0.6);">🏭 ${hub.name}</div>`
+          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:11px; padding:4px 10px; border-radius:8px; border:2px solid #fff; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.8); display:flex; align-items:center; gap:4px;">🏭 ${result?.warehouseName || hub.name}</div>`
           : `<div style="width:12px; height:12px; border-radius:50%; border:2px solid #020617; background:${
-              hub.status === 'AVAILABLE' ? '#10b981' : hub.status === 'CONSTRAINED' ? '#f59e0b' : '#f43f5e'
-            }; box-shadow:0 2px 4px rgba(0,0,0,0.5); cursor:pointer;"></div>`;
+              hub.status === 'AVAILABLE' ? '#10b981' : hub.status === 'CONSTRAINED' ? '#f59e0b' : '#ef4444'
+            }; box-shadow:0 2px 4px rgba(0,0,0,0.6); cursor:pointer;"></div>`;
 
         const customIcon = L.divIcon({
           html: iconHtml,
           className: 'leaflet-custom-hub',
-          iconSize: isSelected ? [140, 24] : [12, 12],
-          iconAnchor: isSelected ? [70, 12] : [6, 6],
+          iconSize: isSelected ? [160, 26] : [12, 12],
+          iconAnchor: isSelected ? [80, 13] : [6, 6],
         });
 
-        const marker = L.marker([hub.latitude, hub.longitude], { icon: customIcon }).addTo(layerGroup);
+        const marker = L.marker([hub.latitude, hub.longitude], {
+          icon: customIcon,
+          zIndexOffset: isSelected ? 1500 : 500,
+        }).addTo(layerGroup);
+
         if (!isSelected) {
           marker.bindTooltip(hub.name, {
             direction: 'top',
@@ -190,15 +242,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         }
       });
 
-      // Render Customer Marker (📍 YOU) at exact selected map coordinates or resolved backend coordinates
-      const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
-      const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
-
+      // 3. Render Customer Marker (📍 YOU) at exact customer coordinates with highest z-index (Req 4: zIndexOffset: 2000)
       if (activeCustLat != null && activeCustLng != null) {
-        boundsPoints.push([activeCustLat, activeCustLng]);
+        if (!result || !result.eligible) {
+          boundsPoints.push([activeCustLat, activeCustLng]);
+        }
 
         const custIcon = L.divIcon({
-          html: `<div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -100%);"><div style="background:#f59e0b; color:#020617; font-weight:900; font-size:10px; padding:2px 6px; border-radius:6px; border:1.5px solid #fff; box-shadow:0 4px 10px rgba(0,0,0,0.7); white-space:nowrap; margin-bottom:2px;">📍 YOU</div><div style="width:14px; height:14px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 0 10px #f59e0b;"></div></div>`,
+          html: `<div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -100%);"><div style="background:#f59e0b; color:#020617; font-weight:900; font-size:11px; padding:3px 8px; border-radius:8px; border:2px solid #fff; box-shadow:0 4px 14px rgba(0,0,0,0.8); white-space:nowrap; margin-bottom:2px;">📍 YOU</div><div style="width:14px; height:14px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 0 12px #f59e0b;"></div></div>`,
           className: 'leaflet-custom-cust',
           iconSize: [60, 36],
           iconAnchor: [30, 36],
@@ -206,7 +257,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
         const custMarker = L.marker([activeCustLat, activeCustLng], {
           icon: custIcon,
-          zIndexOffset: 1000, // Ensure customer marker renders above warehouse markers and lines
+          zIndexOffset: 2000,
         }).addTo(layerGroup);
 
         custMarker.bindPopup(`
@@ -217,46 +268,12 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             <div style="font-size:10px; color:#cbd5e1;">Longitude: <b>${activeCustLng.toFixed(4)}</b></div>
           </div>
         `);
-
-        if (result && result.eligible && result.warehouseLatitude != null && result.warehouseLongitude != null) {
-          const whLat = result.warehouseLatitude;
-          const whLng = result.warehouseLongitude;
-
-          const roadGeom = (result.route?.geometry && result.route.geometry.length > 0)
-            ? result.route.geometry
-            : (result.routeGeometry && result.routeGeometry.length > 0)
-              ? result.routeGeometry
-              : [[whLat, whLng], [activeCustLat, activeCustLng]];
-
-          // Render BLUE Real Road Polyline (Phase 15C)
-          L.polyline(roadGeom, {
-            color: '#3b82f6', // Distinct Vibrant Blue
-            weight: 4.5,
-            opacity: 0.85,
-            lineCap: 'round',
-            lineJoin: 'round',
-          }).addTo(layerGroup);
-
-          // Determine midpoint for distance badge
-          const midIndex = Math.floor(roadGeom.length / 2);
-          const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
-
-          const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
-          const durText = (result.durationMinutes || result.travelTimeMinutes) ? ` • ~${result.durationMinutes || result.travelTimeMinutes} min` : '';
-
-          const badgeIcon = L.divIcon({
-            html: `<div style="padding:3px 9px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1.5px solid #3b82f6; font-size:10px; font-weight:900; color:#93c5fd; white-space:nowrap; box-shadow:0 4px 10px rgba(0,0,0,0.6);">🔵 ${distText}${durText}</div>`,
-            className: 'leaflet-custom-badge',
-            iconSize: [120, 24],
-            iconAnchor: [60, 12],
-          });
-
-          L.marker(midPoint, { icon: badgeIcon }).addTo(layerGroup);
-        }
       }
 
+      // 4. Auto-Fit Map Bounds (Req 6)
       if (boundsPoints.length > 0) {
-        map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40] });
+        const paddingAmount = result && result.eligible ? [50, 50] : [35, 35];
+        map.fitBounds(L.latLngBounds(boundsPoints), { padding: paddingAmount, maxZoom: 16 });
       }
 
       setTimeout(() => map?.invalidateSize(), 250);
@@ -367,11 +384,11 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900">
+        <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-800/80 bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-900 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
               <Zap className="w-5 h-5 text-slate-950 fill-slate-950" />
@@ -393,7 +410,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+        <div className="p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1 pb-6">
           
           {/* Product Summary */}
           <div className="flex items-center space-x-4 p-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50">
@@ -510,7 +527,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           </div>
 
           {/* Hyderabad Geographic Fulfillment Network Map Component */}
-          <div className="relative h-56 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden p-3 flex flex-col justify-between shadow-inner">
+          <div className="relative h-48 sm:h-52 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden p-2.5 flex flex-col justify-between shadow-inner shrink-0">
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 z-10 bg-slate-950/80 px-2 py-1 rounded-lg backdrop-blur-sm">
               <span className="flex items-center gap-1.5 text-white">
                 <Building2 className="w-3.5 h-3.5 text-amber-400" />
@@ -558,10 +575,10 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                       y1={`${whPos.y}%`}
                       x2={`${custPos.x}%`}
                       y2={`${custPos.y}%`}
-                      stroke="#3b82f6"
-                      strokeWidth="2.5"
-                      strokeDasharray="5 3"
-                      className="animate-pulse"
+                      stroke="#2563eb"
+                      strokeWidth="4.5"
+                      strokeDasharray="none"
+                      className="opacity-95"
                     />
                     {/* Route Midpoint Distance Badge */}
                     <foreignObject
@@ -571,8 +588,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                       height="24"
                     >
                       <div className="flex items-center justify-center">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-900/90 border border-blue-500/50 text-[10px] font-black text-blue-300 shadow-md">
-                          {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-900/95 border border-blue-500 text-[10px] font-black text-blue-300 shadow-md">
+                          🔵 {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
                         </span>
                       </div>
                     </foreignObject>
@@ -610,7 +627,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                       <div
                         className={`rounded-full border-2 border-slate-950 shadow-md transition-all ${
                           isSelected
-                            ? 'w-4 h-4 bg-emerald-400 ring-4 ring-emerald-500/40 animate-pulse'
+                            ? 'w-4 h-4 bg-emerald-500 ring-4 ring-emerald-500/40 animate-pulse'
                             : hub.status === 'AVAILABLE'
                             ? 'w-3 h-3 bg-emerald-400'
                             : hub.status === 'CONSTRAINED'
@@ -625,7 +642,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                             : 'hidden group-hover:block text-white border-slate-700 z-20'
                         }`}
                       >
-                        {isSelected ? `⚡ ${hub.name}` : hub.name}
+                        {isSelected ? `🏭 ${result?.warehouseName || hub.name}` : hub.name}
                       </div>
                     </div>
                   );
