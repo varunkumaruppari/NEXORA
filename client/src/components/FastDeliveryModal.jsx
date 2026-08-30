@@ -82,9 +82,13 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           attributionControl: false,
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        // CARTO Voyager Basemap Tile Layer (CARTO Open Basemap specification)
+        const cartoTileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+        L.tileLayer(cartoTileUrl, {
           maxZoom: 19,
           subdomains: 'abcd',
+          attribution: '&copy; <a href="https://carto.com/" target="_blank" rel="noopener noreferrer">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
         }).addTo(map);
 
         markersLayerRef.current = L.layerGroup().addTo(map);
@@ -118,10 +122,10 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         boundsPoints.push([hub.latitude, hub.longitude]);
 
         const iconHtml = isSelected
-          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:10px; padding:3px 8px; border-radius:8px; border:1px solid #fff; white-space:nowrap; box-shadow:0 4px 6px -1px rgba(0,0,0,0.5);">🏭 ${hub.name}</div>`
+          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:10px; padding:3px 8px; border-radius:8px; border:1px solid #fff; white-space:nowrap; box-shadow:0 4px 10px rgba(0,0,0,0.6);">🏭 ${hub.name}</div>`
           : `<div style="width:12px; height:12px; border-radius:50%; border:2px solid #020617; background:${
               hub.status === 'AVAILABLE' ? '#10b981' : hub.status === 'CONSTRAINED' ? '#f59e0b' : '#f43f5e'
-            }; box-shadow:0 2px 4px rgba(0,0,0,0.5);"></div>`;
+            }; box-shadow:0 2px 4px rgba(0,0,0,0.5); cursor:pointer;"></div>`;
 
         const customIcon = L.divIcon({
           html: iconHtml,
@@ -130,7 +134,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           iconAnchor: isSelected ? [70, 12] : [6, 6],
         });
 
-        L.marker([hub.latitude, hub.longitude], { icon: customIcon }).addTo(layerGroup);
+        const marker = L.marker([hub.latitude, hub.longitude], { icon: customIcon }).addTo(layerGroup);
+        if (!isSelected) {
+          marker.bindTooltip(hub.name, {
+            direction: 'top',
+            offset: [0, -6],
+            className: 'bg-slate-900 text-white font-bold text-[10px] px-2 py-1 rounded border border-slate-700 shadow-md',
+          });
+        }
       });
 
       if (result && result.eligible && result.customerLatitude != null && result.customerLongitude != null) {
