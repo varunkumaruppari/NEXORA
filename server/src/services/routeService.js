@@ -70,8 +70,7 @@ export async function calculateRoute(origin, destination) {
   );
 
   const roadDistanceKm = Math.round(haversineDist * 1.25 * 10) / 10;
-  // Estimated urban travel time: ~30 km/h avg speed + 20 mins warehouse dispatch buffer
-  const durationMinutes = Math.round((roadDistanceKm / 30) * 60) + 20;
+  const durationMinutes = roadDistanceKm === 0 ? 0 : Math.round((roadDistanceKm / 30) * 60) + 10;
 
   const result = {
     available: true,

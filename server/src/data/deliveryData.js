@@ -219,7 +219,7 @@ WAREHOUSES['WH-CLOSED'] = WAREHOUSES['WH-HYD-010'];
 export const DELIVERY_ZONES = {
   // Gachibowli / Cyberabad
   '500032': { pincode: '500032', city: 'Hyderabad', state: 'Telangana', latitude: 17.4401, longitude: 78.3489, zoneName: 'Hyderabad Gachibowli Tech Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-001', standardTransitDays: 2 },
-  '500081': { pincode: '500081', city: 'Hyderabad', state: 'Telangana', latitude: 17.4435, longitude: 78.3772, zoneName: 'Hyderabad HITEC City Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-002', standardTransitDays: 2 },
+  '500081': { pincode: '500081', city: 'Hyderabad', state: 'Telangana', latitude: 17.4485, longitude: 78.3810, zoneName: 'Hyderabad HITEC City Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-002', standardTransitDays: 2 },
   '500084': { pincode: '500084', city: 'Hyderabad', state: 'Telangana', latitude: 17.4589, longitude: 78.3654, zoneName: 'Kondapur Tech Hub Zone', serviceable: true, oneDayEligible: true, primaryWarehouse: 'WH-HYD-001', standardTransitDays: 2 },
 
   // Central / Secunderabad / Begumpet

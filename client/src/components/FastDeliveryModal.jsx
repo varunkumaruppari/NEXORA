@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Zap,
   X,
@@ -57,11 +59,126 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   const [errorMsg, setErrorMsg] = useState(null);
   const [geoLocating, setGeoLocating] = useState(false);
 
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersLayerRef = useRef(null);
+
   useEffect(() => {
     if (isOpen && product) {
       handleCheckDelivery(pincode, address, quantity);
     }
   }, [isOpen, product]);
+
+  // Real Leaflet + OpenStreetMap Map Tile Initialization
+  useEffect(() => {
+    if (!isOpen || !mapContainerRef.current) return;
+
+    try {
+      if (!mapInstanceRef.current) {
+        const map = L.map(mapContainerRef.current, {
+          center: [17.4435, 78.3772],
+          zoom: 12,
+          zoomControl: false,
+          attributionControl: false,
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          maxZoom: 19,
+          subdomains: 'abcd',
+        }).addTo(map);
+
+        markersLayerRef.current = L.layerGroup().addTo(map);
+        mapInstanceRef.current = map;
+      }
+
+      const map = mapInstanceRef.current;
+      const layerGroup = markersLayerRef.current;
+      if (!map || !layerGroup) return;
+
+      layerGroup.clearLayers();
+
+      const hubsToRender = result?.allWarehouses || [
+        { warehouseId: 'WH-HYD-001', name: 'NEXORA Gachibowli Hub', latitude: 17.4401, longitude: 78.3489, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-002', name: 'NEXORA HITEC City Express', latitude: 17.4435, longitude: 78.3772, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-003', name: 'NEXORA Madhapur Hub', latitude: 17.4483, longitude: 78.3915, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-004', name: 'NEXORA Kukatpally Depot', latitude: 17.4849, longitude: 78.4138, status: 'CONSTRAINED' },
+        { warehouseId: 'WH-HYD-005', name: 'NEXORA Secunderabad Hub', latitude: 17.4399, longitude: 78.4983, status: 'UNAVAILABLE' },
+        { warehouseId: 'WH-HYD-006', name: 'NEXORA Begumpet Hub', latitude: 17.4448, longitude: 78.4661, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-007', name: 'NEXORA Uppal East Hub', latitude: 17.4057, longitude: 78.5601, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-008', name: 'NEXORA LB Nagar Hub', latitude: 17.3457, longitude: 78.5522, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-009', name: 'NEXORA Mehdipatnam Hub', latitude: 17.3916, longitude: 78.4398, status: 'AVAILABLE' },
+        { warehouseId: 'WH-HYD-010', name: 'NEXORA Shamshabad Hub', latitude: 17.2403, longitude: 78.4294, status: 'UNAVAILABLE' },
+      ];
+
+      const boundsPoints = [];
+
+      hubsToRender.forEach((hub) => {
+        if (!hub.latitude || !hub.longitude) return;
+        const isSelected = result?.warehouseId === hub.warehouseId;
+        boundsPoints.push([hub.latitude, hub.longitude]);
+
+        const iconHtml = isSelected
+          ? `<div style="background:#059669; color:#fff; font-weight:800; font-size:10px; padding:3px 8px; border-radius:8px; border:1px solid #fff; white-space:nowrap; box-shadow:0 4px 6px -1px rgba(0,0,0,0.5);">🏭 ${hub.name}</div>`
+          : `<div style="width:12px; height:12px; border-radius:50%; border:2px solid #020617; background:${
+              hub.status === 'AVAILABLE' ? '#10b981' : hub.status === 'CONSTRAINED' ? '#f59e0b' : '#f43f5e'
+            }; box-shadow:0 2px 4px rgba(0,0,0,0.5);"></div>`;
+
+        const customIcon = L.divIcon({
+          html: iconHtml,
+          className: 'leaflet-custom-hub',
+          iconSize: isSelected ? [140, 24] : [12, 12],
+          iconAnchor: isSelected ? [70, 12] : [6, 6],
+        });
+
+        L.marker([hub.latitude, hub.longitude], { icon: customIcon }).addTo(layerGroup);
+      });
+
+      if (result && result.eligible && result.customerLatitude != null && result.customerLongitude != null) {
+        const custLat = result.customerLatitude;
+        const custLng = result.customerLongitude;
+        boundsPoints.push([custLat, custLng]);
+
+        const custIcon = L.divIcon({
+          html: `<div style="display:flex; align-items:center; gap:4px;"><div style="width:24px; height:24px; border-radius:50%; background:#f59e0b; color:#020617; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:11px; box-shadow:0 0 12px rgba(245,158,11,0.8);">📍</div><span style="font-size:10px; font-weight:800; color:#fde68a; background:rgba(15,23,42,0.9); padding:2px 6px; border-radius:4px; border:1px solid rgba(245,158,11,0.5);">YOU</span></div>`,
+          className: 'leaflet-custom-cust',
+          iconSize: [60, 24],
+          iconAnchor: [12, 12],
+        });
+
+        L.marker([custLat, custLng], { icon: custIcon }).addTo(layerGroup);
+
+        const whLat = result.warehouseLatitude || 17.4435;
+        const whLng = result.warehouseLongitude || 78.3772;
+
+        L.polyline([[whLat, whLng], [custLat, custLng]], {
+          color: '#10b981',
+          weight: 3.5,
+          dashArray: '6, 6',
+        }).addTo(layerGroup);
+
+        const midLat = (whLat + custLat) / 2;
+        const midLng = (whLng + custLng) / 2;
+        const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
+
+        const badgeIcon = L.divIcon({
+          html: `<div style="padding:2px 8px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1px solid rgba(16,185,129,0.5); font-size:10px; font-weight:900; color:#6ee7b7; white-space:nowrap; box-shadow:0 4px 6px -1px rgba(0,0,0,0.5);">${distText}</div>`,
+          className: 'leaflet-custom-badge',
+          iconSize: [80, 20],
+          iconAnchor: [40, 10],
+        });
+
+        L.marker([midLat, midLng], { icon: badgeIcon }).addTo(layerGroup);
+      }
+
+      if (boundsPoints.length > 0) {
+        map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40] });
+      }
+
+      setTimeout(() => map?.invalidateSize(), 250);
+    } catch (e) {
+      console.warn('Leaflet map initialization fallback:', e);
+    }
+  }, [isOpen, result]);
 
   if (!isOpen || !product) return null;
 
@@ -315,7 +432,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
             </div>
 
             {/* Geographic Map Canvas with OpenStreetMap Backdrop & Real Landmarks */}
-            <div className="relative flex-1 my-1 bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden">
+            <div ref={mapContainerRef} className="relative flex-1 my-1 bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden z-0">
               
               {/* Geographic Tile Map Layer */}
               <div className="absolute inset-0 opacity-30 bg-[radial-gradient(#475569_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none"></div>
