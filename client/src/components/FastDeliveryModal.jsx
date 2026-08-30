@@ -64,7 +64,11 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
 
+  const [activeRoute, setActiveRoute] = useState(null);
+  const [routeState, setRouteState] = useState('IDLE'); // 'IDLE' | 'ROUTING' | 'SUCCESS' | 'ERROR'
+
   const locationReqId = useRef(0);
+  const routeReqId = useRef(0);
 
   const isValidCoordinate = (lat, lng) => {
     return (
@@ -123,8 +127,11 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   useEffect(() => {
     if (isOpen) {
       locationReqId.current += 1;
+      routeReqId.current += 1;
       setSelectedLocation(null);
       setResult(null);
+      setActiveRoute(null);
+      setRouteState('IDLE');
       setErrorMsg(null);
       setPincode(defaultPincode || '');
       setAddress('');
@@ -132,19 +139,78 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     }
   }, [isOpen, product?.id, defaultPincode]);
 
+  // Phase 16D Real OSRM Road Route Engine Trigger
+  useEffect(() => {
+    if (!selectedLocation || result) {
+      setActiveRoute(null);
+      setRouteState('IDLE');
+      return;
+    }
+
+    const custLat = Number(selectedLocation.latitude);
+    const custLng = Number(selectedLocation.longitude);
+    if (!isValidCoordinate(custLat, custLng)) return;
+
+    const candidate = getCandidateWarehouse(custLat, custLng, [
+      { warehouseId: 'WH-HYD-001', name: 'NEXORA Gachibowli Hub', latitude: 17.4401, longitude: 78.3489 },
+      { warehouseId: 'WH-HYD-002', name: 'NEXORA HITEC City Express', latitude: 17.4435, longitude: 78.3772 },
+      { warehouseId: 'WH-HYD-003', name: 'NEXORA Madhapur Hub', latitude: 17.4483, longitude: 78.3915 },
+      { warehouseId: 'WH-HYD-004', name: 'NEXORA Kukatpally Depot', latitude: 17.4849, longitude: 78.4138 },
+      { warehouseId: 'WH-HYD-005', name: 'NEXORA Secunderabad Hub', latitude: 17.4399, longitude: 78.4983 },
+      { warehouseId: 'WH-HYD-006', name: 'NEXORA Begumpet Hub', latitude: 17.4448, longitude: 78.4661 },
+      { warehouseId: 'WH-HYD-007', name: 'NEXORA Uppal East Hub', latitude: 17.4057, longitude: 78.5601 },
+      { warehouseId: 'WH-HYD-008', name: 'NEXORA LB Nagar Hub', latitude: 17.3457, longitude: 78.5522 },
+      { warehouseId: 'WH-HYD-009', name: 'NEXORA Mehdipatnam Hub', latitude: 17.3916, longitude: 78.4398 },
+      { warehouseId: 'WH-HYD-010', name: 'NEXORA Shamshabad Hub', latitude: 17.2403, longitude: 78.4294 },
+    ]);
+
+    if (!candidate) return;
+
+    routeReqId.current += 1;
+    const currentRouteReqId = routeReqId.current;
+
+    setRouteState('ROUTING');
+
+    API.post('/delivery/route', {
+      origin: { latitude: candidate.latitude, longitude: candidate.longitude },
+      destination: { latitude: custLat, longitude: custLng },
+    })
+      .then((res) => {
+        if (currentRouteReqId !== routeReqId.current) return;
+        if (res.data && res.data.available && Array.isArray(res.data.geometry) && res.data.geometry.length >= 2) {
+          setActiveRoute(res.data);
+          setRouteState('SUCCESS');
+        } else {
+          setActiveRoute(null);
+          setRouteState('ERROR');
+        }
+      })
+      .catch((err) => {
+        if (currentRouteReqId !== routeReqId.current) return;
+        setActiveRoute(null);
+        setRouteState('ERROR');
+      });
+  }, [selectedLocation, result]);
+
   const handlePincodeChange = (newPin) => {
     locationReqId.current += 1;
+    routeReqId.current += 1;
     setPincode(newPin);
     setSelectedLocation(null);
     setResult(null);
+    setActiveRoute(null);
+    setRouteState('IDLE');
     setErrorMsg(null);
   };
 
   const handleAddressChange = (newAddress) => {
     locationReqId.current += 1;
+    routeReqId.current += 1;
     setAddress(newAddress);
     setSelectedLocation(null);
     setResult(null);
+    setActiveRoute(null);
+    setRouteState('IDLE');
     setErrorMsg(null);
   };
 
@@ -152,6 +218,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     if (!isValidCoordinate(lat, lng)) return;
 
     locationReqId.current += 1;
+    routeReqId.current += 1;
     const currentReqId = locationReqId.current;
 
     const mapLocObj = {
@@ -165,6 +232,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     setSelectedLocation(mapLocObj);
     setErrorMsg(null);
     setResult(null); // Invalidate previous result; user must click Check Availability
+    setActiveRoute(null);
+    setRouteState('IDLE');
   };
 
   // Cleanup Leaflet map instance on modal unmount
@@ -261,15 +330,34 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       }
       const activeSelectedWhId = result?.warehouseId || candidateWh?.warehouseId;
 
-      if (result && result.eligible && activeCustLat != null && activeCustLng != null && result.warehouseLatitude != null && result.warehouseLongitude != null) {
-        const whLat = Number(result.warehouseLatitude);
-        const whLng = Number(result.warehouseLongitude);
+      // Phase 16D Unified Route Data Object (from backend result OR active OSRM route)
+      const routeData = result?.eligible
+        ? {
+            distanceKm: result.distanceKm,
+            durationMinutes: result.durationMinutes || result.travelTimeMinutes,
+            geometry: (result.route?.geometry && result.route.geometry.length > 0)
+              ? result.route.geometry
+              : result.routeGeometry,
+            warehouseLatitude: result.warehouseLatitude,
+            warehouseLongitude: result.warehouseLongitude,
+          }
+        : (activeRoute && activeRoute.available && candidateWh)
+          ? {
+              distanceKm: activeRoute.distanceKm,
+              durationMinutes: activeRoute.durationMinutes,
+              geometry: activeRoute.geometry,
+              warehouseLatitude: candidateWh.latitude,
+              warehouseLongitude: candidateWh.longitude,
+            }
+          : null;
 
-        const rawRoadGeom = (result.route?.geometry && result.route.geometry.length > 0)
-          ? result.route.geometry
-          : (result.routeGeometry && result.routeGeometry.length > 0)
-            ? result.routeGeometry
-            : [[whLat, whLng], [activeCustLat, activeCustLng]];
+      if (routeData && activeCustLat != null && activeCustLng != null && routeData.warehouseLatitude != null && routeData.warehouseLongitude != null) {
+        const whLat = Number(routeData.warehouseLatitude);
+        const whLng = Number(routeData.warehouseLongitude);
+
+        const rawRoadGeom = (routeData.geometry && routeData.geometry.length > 0)
+          ? routeData.geometry
+          : [[whLat, whLng], [activeCustLat, activeCustLng]];
 
         const roadGeom = rawRoadGeom.filter(
           (pt) => Array.isArray(pt) && pt.length >= 2 && !isNaN(pt[0]) && !isNaN(pt[1])
@@ -288,8 +376,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           const midIndex = Math.floor(roadGeom.length / 2);
           const midPoint = roadGeom[midIndex] || [(whLat + activeCustLat) / 2, (whLng + activeCustLng) / 2];
 
-          const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
-          const durText = (result.durationMinutes || result.travelTimeMinutes) ? ` • ~${result.durationMinutes || result.travelTimeMinutes} min` : '';
+          const distText = routeData.distanceKm < 1 ? `Approx. ${routeData.distanceKm} km` : `${routeData.distanceKm} km`;
+          const durText = routeData.durationMinutes ? ` • ~${routeData.durationMinutes} min` : '';
 
           const badgeIcon = L.divIcon({
             html: `<div style="padding:4px 10px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1.5px solid #2563eb; font-size:11px; font-weight:900; color:#93c5fd; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.7); display:flex; align-items:center; gap:4px;">🔵 ${distText}${durText}</div>`,
@@ -309,7 +397,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       hubsToRender.forEach((hub) => {
         if (!hub.latitude || !hub.longitude) return;
         const isSelected = activeSelectedWhId === hub.warehouseId;
-        if (!result || !result.eligible) {
+        if (!routeData && (!result || !result.eligible)) {
           boundsPoints.push([hub.latitude, hub.longitude]);
         }
 
