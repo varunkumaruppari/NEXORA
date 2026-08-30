@@ -64,9 +64,25 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
 
+  const locationReqId = useRef(0);
+
+  const isValidCoordinate = (lat, lng) => {
+    return (
+      typeof lat === 'number' &&
+      typeof lng === 'number' &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    );
+  };
+
   // Clean initial state on modal open: NO default location, NO 📍 YOU marker, NO auto-check
   useEffect(() => {
     if (isOpen) {
+      locationReqId.current += 1;
       setSelectedLocation(null);
       setResult(null);
       setErrorMsg(null);
@@ -77,6 +93,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   }, [isOpen, product?.id, defaultPincode]);
 
   const handlePincodeChange = (newPin) => {
+    locationReqId.current += 1;
     setPincode(newPin);
     setSelectedLocation(null);
     setResult(null);
@@ -84,6 +101,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   };
 
   const handleAddressChange = (newAddress) => {
+    locationReqId.current += 1;
     setAddress(newAddress);
     setSelectedLocation(null);
     setResult(null);
@@ -91,14 +109,17 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   };
 
   const handleMapClick = (lat, lng) => {
-    const cleanLat = Number(lat.toFixed(6));
-    const cleanLng = Number(lng.toFixed(6));
+    if (!isValidCoordinate(lat, lng)) return;
+
+    locationReqId.current += 1;
+    const currentReqId = locationReqId.current;
 
     const mapLocObj = {
-      latitude: cleanLat,
-      longitude: cleanLng,
+      latitude: lat,
+      longitude: lng,
       source: 'MAP_CLICK',
-      address: `Selected Map Location (${cleanLat.toFixed(4)}, ${cleanLng.toFixed(4)})`,
+      address: `Selected Map Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+      requestId: currentReqId,
     };
 
     setSelectedLocation(mapLocObj);
@@ -272,9 +293,13 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         }
       });
 
-      if (activeCustLat != null && activeCustLng != null) {
+      // Render Customer Marker (📍 YOU) at exact customer coordinates with highest z-index
+      if (activeCustLat != null && activeCustLng != null && isValidCoordinate(Number(activeCustLat), Number(activeCustLng))) {
+        const cleanCustLat = Number(activeCustLat);
+        const cleanCustLng = Number(activeCustLng);
+
         if (!result || !result.eligible) {
-          boundsPoints.push([activeCustLat, activeCustLng]);
+          boundsPoints.push([cleanCustLat, cleanCustLng]);
         }
 
         const custIcon = L.divIcon({
@@ -284,17 +309,17 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           iconAnchor: [30, 36],
         });
 
-        const custMarker = L.marker([activeCustLat, activeCustLng], {
+        const custMarker = L.marker([cleanCustLat, cleanCustLng], {
           icon: custIcon,
           zIndexOffset: 2000,
         }).addTo(layerGroup);
 
         custMarker.bindPopup(`
           <div style="font-family:sans-serif; padding:4px;">
-            <div style="font-weight:bold; color:#f59e0b; font-size:12px; margin-bottom:2px;">📍 YOU</div>
-            <div style="font-size:10px; color:#94a3b8;">Selected delivery location</div>
-            <div style="font-size:10px; color:#cbd5e1; margin-top:4px;">Latitude: <b>${activeCustLat.toFixed(4)}</b></div>
-            <div style="font-size:10px; color:#cbd5e1;">Longitude: <b>${activeCustLng.toFixed(4)}</b></div>
+            <div style="font-weight:bold; color:#f59e0b; font-size:12px; margin-bottom:2px;">📍 YOU (${selectedLocation?.source || 'LOCATION'})</div>
+            <div style="font-size:10px; color:#94a3b8;">${selectedLocation?.address || 'Selected delivery location'}</div>
+            <div style="font-size:10px; color:#cbd5e1; margin-top:4px;">Latitude: <b>${cleanCustLat.toFixed(6)}</b></div>
+            <div style="font-size:10px; color:#cbd5e1;">Longitude: <b>${cleanCustLng.toFixed(6)}</b></div>
           </div>
         `);
       }
@@ -344,12 +369,17 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           setPincode(response.data.pincode);
         }
         if (response.data.customerLatitude != null && response.data.customerLongitude != null) {
-          setSelectedLocation({
-            latitude: response.data.customerLatitude,
-            longitude: response.data.customerLongitude,
-            source: response.data.locationSource || 'PIN',
-            address: addressToCheck || `Resolved Location (${response.data.pincode || cleanPin})`,
-          });
+          const resLat = Number(response.data.customerLatitude);
+          const resLng = Number(response.data.customerLongitude);
+          if (isValidCoordinate(resLat, resLng)) {
+            setSelectedLocation({
+              latitude: resLat,
+              longitude: resLng,
+              source: response.data.locationSource || 'PIN',
+              address: addressToCheck || `Resolved Location (${response.data.pincode || cleanPin})`,
+              requestId: locationReqId.current,
+            });
+          }
         }
         if (onDeliveryCheckResult && product?.id) {
           onDeliveryCheckResult(product.id, qtyToCheck, response.data.pincode || cleanPin, response.data);
@@ -384,20 +414,32 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     setErrorMsg(null);
     setResult(null);
 
+    locationReqId.current += 1;
+    const currentReqId = locationReqId.current;
+
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
+      (position) => {
         setGeoLocating(false);
+        if (currentReqId !== locationReqId.current) return;
+
         const { latitude, longitude } = position.coords;
+        if (!isValidCoordinate(latitude, longitude)) {
+          setErrorMsg('Invalid GPS coordinates received.');
+          return;
+        }
+
         const gpsLocObj = {
-          latitude: Number(latitude.toFixed(6)),
-          longitude: Number(longitude.toFixed(6)),
+          latitude: Number(latitude),
+          longitude: Number(longitude),
           source: 'GPS',
           address: 'Current GPS Location, Hyderabad',
+          requestId: currentReqId,
         };
         setSelectedLocation(gpsLocObj);
       },
       (err) => {
         setGeoLocating(false);
+        if (currentReqId !== locationReqId.current) return;
         setErrorMsg('Location permission denied or unavailable. Please enter PIN code manually.');
       },
       { timeout: 8000 }
@@ -405,10 +447,12 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   };
 
   const handleSelectSample = (samplePin) => {
+    locationReqId.current += 1;
     setPincode(samplePin);
     setAddress('');
     setSelectedLocation(null);
     setResult(null);
+    setErrorMsg(null);
   };
 
   return (
