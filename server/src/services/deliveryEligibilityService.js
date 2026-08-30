@@ -377,18 +377,21 @@ export async function checkDeliveryEligibility(options = {}) {
     // -------------------------------------------------------------
     // STEP 11 & STEP 12: Delivery Agent Discovery & Workload Capacity
     // -------------------------------------------------------------
-    const assignedAgents = DELIVERY_AGENTS.filter(
-      (agent) =>
-        agent.warehouseId === selectedWarehouse.warehouseId &&
-        agent.serviceZones.includes(cleanPincode)
+    // -------------------------------------------------------------
+    // STEP 11 & STEP 12: Intelligent Delivery Agent Selection & Scoring (Phase 15G)
+    // -------------------------------------------------------------
+    const candidateAgents = DELIVERY_AGENTS.filter(
+      (agent) => agent.warehouseId === selectedWarehouse.warehouseId
     );
 
-    const availableAgent = assignedAgents.find(
+    const validAgents = candidateAgents.filter(
       (agent) => agent.status === 'AVAILABLE' && agent.activeDeliveries < agent.capacity
     );
 
-    if (!availableAgent && assignedAgents.length > 0) {
-      const busyAgent = assignedAgents.find((agent) => agent.activeDeliveries >= agent.capacity);
+    if (validAgents.length === 0) {
+      const busyAgent = candidateAgents.find(
+        (agent) => agent.status === 'BUSY' || agent.activeDeliveries >= agent.capacity
+      );
       const reasonCode = busyAgent ? 'AGENT_CAPACITY_FULL' : 'NO_AVAILABLE_AGENT';
       const customerMsg = busyAgent ? REASON_MESSAGES.AGENT_CAPACITY_FULL : REASON_MESSAGES.NO_AVAILABLE_AGENT;
 
@@ -409,6 +412,42 @@ export async function checkDeliveryEligibility(options = {}) {
         customerMessage: customerMsg,
       });
     }
+
+    // Deterministic Scoring Engine for Agent Selection
+    const scoredAgents = validAgents.map((agent) => {
+      const zoneMatchScore = (agent.serviceZones && agent.serviceZones.includes(cleanPincode)) ? 10 : 0;
+      const remainingCapacity = agent.capacity - agent.activeDeliveries;
+      const remainingCapacityScore = remainingCapacity * 5;
+      const workloadScore = (10 - agent.activeDeliveries) * 2;
+
+      let proximityScore = 0;
+      if (
+        agent.currentLocation?.latitude != null &&
+        agent.currentLocation?.longitude != null &&
+        geocodeResult.latitude != null &&
+        geocodeResult.longitude != null
+      ) {
+        const proxDist = calculateHaversineDistance(
+          agent.currentLocation.latitude,
+          agent.currentLocation.longitude,
+          geocodeResult.latitude,
+          geocodeResult.longitude
+        );
+        proximityScore = Math.max(0, 15 - proxDist);
+      }
+
+      const totalScore = zoneMatchScore + remainingCapacityScore + workloadScore + proximityScore;
+      return { agent, score: totalScore, remainingCapacity };
+    });
+
+    // Deterministic Sort: Highest score first, tie-breaker: lowest agentId (alphabetical)
+    scoredAgents.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.agent.agentId.localeCompare(b.agent.agentId);
+    });
+
+    const bestAgentRecord = scoredAgents[0];
+    const selectedAgent = bestAgentRecord.agent;
 
     // -------------------------------------------------------------
     // STEP 13: Estimated Travel Time (Consistent with route calculation)
@@ -458,31 +497,48 @@ export async function checkDeliveryEligibility(options = {}) {
     }
 
     // -------------------------------------------------------------
-    // STEP 15: Demand Level Calculation
+    // STEP 15: Operational Demand Level Calculation (Phase 15H)
     // -------------------------------------------------------------
     const capacityRatio = selectedWarehouse.currentReservedCapacity / selectedWarehouse.maxOneDayCapacity;
     let demandLevel = 'LOW';
     let demandFeeAddon = 0;
-    if (capacityRatio > 0.9) {
+    if (capacityRatio >= 0.90) {
       demandLevel = 'VERY_HIGH';
-      demandFeeAddon = 55;
-    } else if (capacityRatio > 0.7) {
+      demandFeeAddon = 40;
+    } else if (capacityRatio >= 0.70) {
       demandLevel = 'HIGH';
-      demandFeeAddon = 35;
-    } else if (capacityRatio > 0.4) {
+      demandFeeAddon = 25;
+    } else if (capacityRatio >= 0.40) {
       demandLevel = 'MEDIUM';
-      demandFeeAddon = 15;
+      demandFeeAddon = 10;
+    } else {
+      demandLevel = 'LOW';
+      demandFeeAddon = 0;
     }
 
     // -------------------------------------------------------------
-    // STEP 16: Dynamic Fast Delivery Fee (Base ₹40 + Distance + Demand, Safety Cap Min ₹20, Max ₹150)
+    // STEP 16: Bounded Dynamic Fast Delivery Pricing (Base ₹40 + Distance + Demand)
+    // Floor: ₹20 min, Cap: ₹150 max
     // -------------------------------------------------------------
     const baseFee = 40;
-    const distanceFeeAddon = Math.round(distanceKm * 2);
-    let calculatedFee = baseFee + distanceFeeAddon + demandFeeAddon;
+    const distanceFeeAddon = Math.round(distanceKm * 1.5);
+    const rawFee = baseFee + distanceFeeAddon + demandFeeAddon;
+    const fastDeliveryFee = Math.max(20, Math.min(150, rawFee));
 
-    // Apply safety cap bounds
-    const fastDeliveryFee = Math.max(20, Math.min(150, calculatedFee));
+    const pricing = {
+      baseFee,
+      distanceFee: distanceFeeAddon,
+      demandFee: demandFeeAddon,
+      finalFee: fastDeliveryFee,
+      demandLevel,
+    };
+
+    const agentPayload = {
+      agentId: selectedAgent.agentId,
+      status: 'AVAILABLE',
+      remainingCapacity: selectedAgent.capacity - selectedAgent.activeDeliveries,
+      name: selectedAgent.name,
+    };
 
     // -------------------------------------------------------------
     // STEP 17: Estimated Arrival Date (Tomorrow T+1)
@@ -508,8 +564,10 @@ export async function checkDeliveryEligibility(options = {}) {
       distanceKm,
       durationMinutes: travelTimeMinutes,
       travelTimeMinutes,
-      agentId: availableAgent ? availableAgent.agentId : 'AGT-HYD-01',
+      agentId: selectedAgent.agentId,
+      agent: agentPayload,
       demandLevel,
+      pricing,
       fastDeliveryFee,
       operatingHoursStatus: 'OPEN',
       reasonCode: 'ONE_DAY_AVAILABLE',
@@ -619,9 +677,17 @@ async function recordAndReturn(data) {
       geometry: data.routeGeometry || data.geometry || [],
     },
     agentId: data.agentId || null,
-    demandLevel: data.demandLevel || null,
+    agent: data.agent || (data.agentId ? { agentId: data.agentId, status: 'AVAILABLE', remainingCapacity: 4 } : null),
+    demandLevel: data.demandLevel || 'LOW',
     fee: data.fastDeliveryFee ?? null,
     fastDeliveryFee: data.fastDeliveryFee ?? null,
+    pricing: data.pricing || {
+      baseFee: 40,
+      distanceFee: Math.round((data.distanceKm || 0) * 1.5),
+      demandFee: 0,
+      finalFee: data.fastDeliveryFee ?? 40,
+      demandLevel: data.demandLevel || 'LOW',
+    },
     travelTimeMinutes: data.travelTimeMinutes ?? null,
     operatingHoursStatus: data.operatingHoursStatus || null,
     reasonCode: data.reasonCode,
