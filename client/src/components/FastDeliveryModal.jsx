@@ -472,6 +472,24 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
   if (!isOpen || !product) return null;
 
+  const deliveryCheckReqId = useRef(0);
+
+  const REASON_CODE_MAP = {
+    DISTANCE_TOO_FAR: "Your location is outside our 35 km one-day delivery range.",
+    INSUFFICIENT_STOCK: "Not enough stock is available for one-day delivery.",
+    OUT_OF_STOCK: "This product is currently out of stock across all fulfillment hubs.",
+    WAREHOUSE_CLOSED: "The nearest fulfillment center is currently closed.",
+    CUT_OFF_PASSED: "Today's one-day delivery cutoff has passed.",
+    NO_AVAILABLE_AGENT: "No delivery agent is currently available for this location.",
+    AGENT_CAPACITY_FULL: "Available delivery agents are currently at capacity.",
+    DELIVERY_CAPACITY_FULL: "One-day delivery capacity for this hub is currently full.",
+    ROUTE_UNAVAILABLE: "A road route could not be calculated for this location.",
+    LOCATION_NOT_SERVICEABLE: "Sorry, we currently do not deliver to this location.",
+    INVALID_QUANTITY: "Please enter a valid order quantity of 1 or more.",
+    PRODUCT_NOT_FOUND: "The specified product could not be located in our catalog.",
+    ENGINE_ERROR: "Unable to verify fast delivery right now. Please try again."
+  };
+
   const handleCheckDelivery = async (pinToCheck = pincode, addressToCheck = address, qtyToCheck = quantity, customLocObj = selectedLocation) => {
     const cleanPin = String(pinToCheck || '').trim();
     if (!cleanPin && !addressToCheck && (!customLocObj || customLocObj.latitude == null)) {
@@ -479,6 +497,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       setResult(null);
       return;
     }
+
+    deliveryCheckReqId.current += 1;
+    const currentCheckReqId = deliveryCheckReqId.current;
 
     setLoading(true);
     setLoadingStep(1);
@@ -498,7 +519,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         location: locationPayload,
       });
 
-      if (response.data) {
+      if (currentCheckReqId !== deliveryCheckReqId.current) return;
+
+      if (response.data && typeof response.data.eligible === 'boolean') {
         setResult(response.data);
         if (response.data.pincode && !customLocObj) {
           setPincode(response.data.pincode);
@@ -523,19 +546,22 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         throw new Error('Malformed API response');
       }
     } catch (err) {
+      if (currentCheckReqId !== deliveryCheckReqId.current) return;
       console.warn('Delivery API error:', err.message);
       setResult({
         success: false,
         eligible: false,
         deliveryType: 'NONE',
         reasonCode: 'ENGINE_ERROR',
-        customerMessage: "Unable to check this location right now. Please try again.",
+        customerMessage: REASON_CODE_MAP.ENGINE_ERROR,
       });
     } finally {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
-      setLoading(false);
-      setLoadingStep(0);
+      if (currentCheckReqId === deliveryCheckReqId.current) {
+        setLoading(false);
+        setLoadingStep(0);
+      }
     }
   };
 
