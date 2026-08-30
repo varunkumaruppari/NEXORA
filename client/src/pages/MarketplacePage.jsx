@@ -26,9 +26,7 @@ import {
   Headphones,
   Smartphone,
   Watch,
-  Laptop,
-  MapPin,
-  Edit3
+  MapPin
 } from 'lucide-react';
 
 export default function MarketplacePage() {
@@ -320,8 +318,8 @@ export default function MarketplacePage() {
                 </div>
 
                 {/* Price & Delivery */}
-                <div className="space-y-3 pt-3 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between">
+                <div className="pt-3 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between gap-2">
                     <div>
                       <span className="text-xl font-extrabold text-white">
                         ₹{product.price.toLocaleString('en-IN')}
@@ -340,35 +338,6 @@ export default function MarketplacePage() {
                       onDeliveryCheckResult={handleDeliveryCheckResult}
                       cachedResult={deliveryCache[`${product.id}_1_${customerLocation?.pincode || '500081'}`]}
                     />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 pt-1">
-                    {product.orderId ? (
-                      <>
-                        <Link
-                          to={`/orders/${product.orderId}`}
-                          className="flex-1 text-center py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-semibold text-xs transition-colors"
-                        >
-                          View Order
-                        </Link>
-
-                        <button
-                          onClick={() => navigate('/chat', { state: { orderId: product.orderId } })}
-                          className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center space-x-1"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Return / Replace</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => navigate('/orders')}
-                        className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 font-semibold text-xs transition-colors"
-                      >
-                        In Stock • Add to Cart
-                      </button>
-                    )}
                   </div>
                 </div>
 
