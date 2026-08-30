@@ -69,6 +69,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
   const locationReqId = useRef(0);
   const routeReqId = useRef(0);
+  const deliveryCheckReqId = useRef(0);
 
   const isValidCoordinate = (lat, lng) => {
     return (
@@ -471,8 +472,6 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   }, [isOpen, result, selectedLocation]);
 
   if (!isOpen || !product) return null;
-
-  const deliveryCheckReqId = useRef(0);
 
   const REASON_CODE_MAP = {
     DISTANCE_TOO_FAR: "Your location is outside our 35 km one-day delivery range.",
