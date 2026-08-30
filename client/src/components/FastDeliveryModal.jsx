@@ -225,29 +225,66 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   </div>
 
                   {/* Delivery Promise Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-emerald-500/20">
-                      <div className="flex items-center space-x-2 text-xs font-medium text-slate-400">
-                        <Truck className="w-4 h-4 text-emerald-400" />
-                        <span>Estimated Arrival</span>
+                      <div className="flex items-center space-x-1.5 text-[11px] font-medium text-slate-400">
+                        <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Arrival</span>
                       </div>
-                      <p className="text-base font-black text-white mt-1">{result.formattedArrival || 'Tomorrow'}</p>
+                      <p className="text-sm font-black text-white mt-1">{result.estimatedDeliveryDate || 'Tomorrow'}</p>
                     </div>
 
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-emerald-500/20">
-                      <div className="flex items-center space-x-2 text-xs font-medium text-slate-400">
-                        <Clock className="w-4 h-4 text-amber-400" />
-                        <span>Order Cutoff Time</span>
+                      <div className="flex items-center space-x-1.5 text-[11px] font-medium text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Cutoff</span>
                       </div>
-                      <p className="text-base font-black text-amber-300 mt-1">Before {result.cutoffFormatted || '3:00 PM'}</p>
+                      <p className="text-sm font-black text-amber-300 mt-1">Before {result.cutoffFormatted || '3:00 PM'}</p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-900/80 border border-emerald-500/20">
+                      <div className="flex items-center space-x-1.5 text-[11px] font-medium text-slate-400">
+                        <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                        <span>Express Fee</span>
+                      </div>
+                      <p className="text-sm font-black text-amber-400 mt-1">₹{result.fastDeliveryFee || 40}</p>
                     </div>
                   </div>
 
-                  {/* Fulfillment Warehouse Info */}
+                  {/* Distance, Agent & Demand Intelligence Specs */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1">
+                    {result.distanceKm && (
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Distance</span>
+                        <span className="font-semibold text-white">Approx. {result.distanceKm} km</span>
+                      </div>
+                    )}
+                    {result.travelTimeMinutes && (
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Travel Time</span>
+                        <span className="font-semibold text-white">~{result.travelTimeMinutes} mins</span>
+                      </div>
+                    )}
+                    {result.demandLevel && (
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300 col-span-2 sm:col-span-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Local Demand</span>
+                        <span className={`font-semibold ${result.demandLevel === 'HIGH' || result.demandLevel === 'VERY_HIGH' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {result.demandLevel} DEMAND
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Fulfillment Warehouse & Agent Capacity Info */}
                   {result.warehouseInfo && (
-                    <div className="flex items-center space-x-2.5 px-3.5 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
-                      <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
-                      <span>Fulfilled by <strong>{result.warehouseInfo.warehouseName}</strong></span>
+                    <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
+                      <div className="flex items-center space-x-2">
+                        <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <span>Hub: <strong>{result.warehouseInfo.warehouseName}</strong></span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" /> Agent Assigned
+                      </span>
                     </div>
                   )}
 

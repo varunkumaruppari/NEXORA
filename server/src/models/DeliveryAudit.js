@@ -35,6 +35,30 @@ const DeliveryAuditSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  distanceKm: {
+    type: Number,
+    default: null,
+  },
+  agentId: {
+    type: String,
+    default: null,
+  },
+  demandLevel: {
+    type: String,
+    default: null,
+  },
+  fastDeliveryFee: {
+    type: Number,
+    default: null,
+  },
+  travelTimeMinutes: {
+    type: Number,
+    default: null,
+  },
+  operatingHoursStatus: {
+    type: String,
+    default: null,
+  },
   reasonCode: {
     type: String,
     required: true,

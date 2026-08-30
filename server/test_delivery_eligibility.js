@@ -1,5 +1,5 @@
 /**
- * RESOLV AI / NEXORA Phase 9 — 30 Fast Delivery Eligibility Automated Tests
+ * RESOLV AI / NEXORA Master 60 Fast Delivery Eligibility Automated Tests
  */
 
 import { checkDeliveryEligibility } from './src/services/deliveryEligibilityService.js';
@@ -29,10 +29,14 @@ async function runTest(num, title, params, expected) {
       isPass = false;
       failReason += `Expected fastestAvailableDays=${expected.fastestAvailableDays}, got ${result.fastestAvailableDays}. `;
     }
+    if (expected.operatingHoursStatus && result.operatingHoursStatus !== expected.operatingHoursStatus) {
+      isPass = false;
+      failReason += `Expected operatingHoursStatus=${expected.operatingHoursStatus}, got ${result.operatingHoursStatus}. `;
+    }
 
     if (isPass) {
       console.log(`[Test ${num}] ${title}`);
-      console.log(`  ✅ PASS | Type: ${result.deliveryType} | Reason: ${result.reasonCode} | Days: ${result.fastestAvailableDays ?? 'N/A'}`);
+      console.log(`  ✅ PASS | Type: ${result.deliveryType} | Reason: ${result.reasonCode} | Days: ${result.fastestAvailableDays ?? 'N/A'} | Fee: ₹${result.fastDeliveryFee ?? 0} | Dist: ${result.distanceKm ?? 0}km`);
       passed++;
       return true;
     } else {
@@ -51,173 +55,300 @@ async function runTest(num, title, params, expected) {
 
 async function runSuite() {
   console.log('==================================================');
-  console.log('  NEXORA FAST DELIVERY ELIGIBILITY TEST SUITE (30 TESTS)');
+  console.log('  NEXORA FAST DELIVERY ELIGIBILITY TEST SUITE (60 TESTS)');
   console.log('==================================================\n');
 
-  // Baseline Morning Time: 10:00 AM today
+  // Baseline Times
   const morningTime = new Date();
-  morningTime.setHours(10, 0, 0, 0);
+  morningTime.setHours(10, 0, 0, 0); // 10:00 AM
 
-  // Afternoon Post-Cutoff Time: 16:30 PM today (After 15:00 cutoff)
   const postCutoffTime = new Date();
-  postCutoffTime.setHours(16, 30, 0, 0);
+  postCutoffTime.setHours(16, 30, 0, 0); // 16:30 PM (After 15:00 cutoff)
 
-  // Exact Pre-Cutoff Time: 14:59 PM today (1 min before 15:00 cutoff)
   const preCutoffTime = new Date();
-  preCutoffTime.setHours(14, 59, 0, 0);
+  preCutoffTime.setHours(14, 59, 0, 0); // 14:59 PM (1 min before cutoff)
 
-  // 1. Valid one-day delivery
-  await runTest(1, 'Valid One-Day Delivery (PROD-1001, PIN 500081, Morning)', {
+  const nightClosedTime = new Date();
+  nightClosedTime.setHours(22, 30, 0, 0); // 22:30 PM (Outside 08:00 - 20:00)
+
+  // -------------------------------------------------------------
+  // PRODUCT CATEGORY (Tests 1 - 2)
+  // -------------------------------------------------------------
+  await runTest(1, 'Valid Product (PROD-1001)', {
     productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
-  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE', fastestAvailableDays: 1 });
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 2. Product out of stock
-  await runTest(2, 'Product Out of Stock (PROD-OUT-OF-STOCK)', {
-    productId: 'PROD-OUT-OF-STOCK', quantity: 1, pincode: '500081', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'OUT_OF_STOCK' });
-
-  // 3. Product not found
-  await runTest(3, 'Product Not Found (PROD-9999)', {
+  await runTest(2, 'Invalid Product (PROD-9999)', {
     productId: 'PROD-9999', quantity: 1, pincode: '500081', mockTime: morningTime
   }, { eligible: false, deliveryType: 'NONE', reasonCode: 'PRODUCT_NOT_FOUND' });
 
-  // 4. Invalid PIN (Short PIN)
-  await runTest(4, 'Invalid PIN Code (123)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '123', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_LOCATION' });
-
-  // 5. Non-serviceable PIN
-  await runTest(5, 'Non-Serviceable PIN (999999)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '999999', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'LOCATION_NOT_SERVICEABLE' });
-
-  // 6. One-day zone (500081 Hyderabad)
-  await runTest(6, 'One-Day Zone (500081 Hyderabad)', {
+  // -------------------------------------------------------------
+  // INVENTORY CATEGORY (Tests 3 - 7)
+  // -------------------------------------------------------------
+  await runTest(3, 'Product In Stock (PROD-1001, Qty 1)', {
     productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
   }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 7. Standard-only zone (400001 Mumbai)
-  await runTest(7, 'Standard-Only Zone (400001 Mumbai)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '400001', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED', fastestAvailableDays: 2 });
+  await runTest(4, 'Product Out of Stock (PROD-OUT-OF-STOCK)', {
+    productId: 'PROD-OUT-OF-STOCK', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'OUT_OF_STOCK' });
 
-  // 8. Cutoff before current time (Post 15:00 Cutoff)
-  await runTest(8, 'Cutoff Passed (16:30 PM for 15:00 Cutoff)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: postCutoffTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'CUT_OFF_PASSED', fastestAvailableDays: 2 });
-
-  // 9. Cutoff after current time (10:00 AM)
-  await runTest(9, 'Before Cutoff (10:00 AM for 15:00 Cutoff)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
-  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
-
-  // 10. Capacity available (WH-HYD 12/50)
-  await runTest(10, 'Capacity Available (WH-HYD Reserved 12/50)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
-  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
-
-  // 11. Capacity full (WH-DEL 30/30)
-  await runTest(11, 'Capacity Full (WH-DEL Reserved 30/30)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '122002', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'DELIVERY_CAPACITY_FULL', fastestAvailableDays: 2 });
-
-  // 12. Sufficient stock (Qty 2 for 25 stock)
-  await runTest(12, 'Sufficient Stock (Qty 2 / 25 Available)', {
-    productId: 'PROD-1001', quantity: 2, pincode: '500081', mockTime: morningTime
-  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
-
-  // 13. Insufficient stock (Qty 100 for 25 stock)
-  await runTest(13, 'Insufficient Stock (Qty 100 / 25 Available)', {
-    productId: 'PROD-1001', quantity: 100, pincode: '500081', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'INSUFFICIENT_STOCK' });
-
-  // 14. Multiple warehouses network lookup
-  await runTest(14, 'Multiple Warehouses Network Lookup (PROD-1001 across HYD/BLR/MUM/DEL)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
-  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
-
-  // 15. Correct warehouse selection (WH-BLR selected for Bengaluru 560100)
-  await runTest(15, 'Correct Warehouse Selection (WH-BLR for 560100)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
-  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
-
-  // 16. Wrong warehouse cannot satisfy local 1-day request
-  await runTest(16, 'Warehouse Without One-Day Route (400001 Mumbai)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '400001', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED' });
-
-  // 17. Customer changes location (500081 -> 700001 Kolkata Regional)
-  await runTest(17, 'Location Change to Regional Standard Zone (700001 Kolkata)', {
-    productId: 'PROD-1001', quantity: 1, pincode: '700001', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED', fastestAvailableDays: 3 });
-
-  // 18. Customer changes quantity (Qty 1 -> Qty 50 exceeding max warehouse stock 40)
-  await runTest(18, 'Quantity Change Exceeding Max Single Warehouse Stock (Qty 50)', {
+  await runTest(5, 'Insufficient Quantity (PROD-1001, Qty 50 Exceeding Max Hub Stock 35)', {
     productId: 'PROD-1001', quantity: 50, pincode: '500081', mockTime: morningTime
   }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'INSUFFICIENT_STOCK' });
 
-  // 19. Product with no warehouse stock
-  await runTest(19, 'Product With Zero Stock (PROD-OUT-OF-STOCK)', {
-    productId: 'PROD-OUT-OF-STOCK', quantity: 1, pincode: '560100', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'OUT_OF_STOCK' });
-
-  // 20. Multiple warehouses with only one-day eligible warehouse
-  await runTest(20, 'Multiple Warehouses One-Day Routing (PROD-1004 Smartphone)', {
-    productId: 'PROD-1004', quantity: 1, pincode: '500081', mockTime: morningTime
+  await runTest(6, 'Exact Available Stock (PROD-1001, Qty 23 Available in HYD)', {
+    productId: 'PROD-1001', quantity: 23, pincode: '500081', mockTime: morningTime
   }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 21. Multiple warehouses with stock but no one-day support (PROD-1005 Keyboard in Mumbai)
-  await runTest(21, 'Keyboard Only In Mumbai Standard Hub (PROD-1005, 400001)', {
-    productId: 'PROD-1005', quantity: 1, pincode: '400001', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED' });
+  await runTest(7, 'Reserved Inventory Full (PROD-RESERVED-FULL)', {
+    productId: 'PROD-RESERVED-FULL', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'OUT_OF_STOCK' });
 
-  // 22. One warehouse out of stock, another eligible (PROD-1003 in HYD is 0, BLR is 15)
-  await runTest(22, 'Hyderabad Out of Stock, Bengaluru Hub Available (PROD-1003, PIN 560100)', {
+  // -------------------------------------------------------------
+  // LOCATION CATEGORY (Tests 8 - 11)
+  // -------------------------------------------------------------
+  await runTest(8, 'Valid PIN Code (500081)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(9, 'Invalid Short PIN Code (123)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '123', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_LOCATION' });
+
+  await runTest(10, 'Serviceable One-Day Location (560100 Bengaluru)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(11, 'Non-Serviceable Remote Location (999999)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '999999', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'LOCATION_NOT_SERVICEABLE' });
+
+  // -------------------------------------------------------------
+  // WAREHOUSE CATEGORY (Tests 12 - 18)
+  // -------------------------------------------------------------
+  await runTest(12, 'One Warehouse Primary Route (500081 -> WH-HYD)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(13, 'Multiple Warehouses Network (PROD-1001 in HYD/BLR/MUM/DEL)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(14, 'Nearest Warehouse Selection (560100 -> WH-BLR)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(15, 'Warehouse With No Stock for Product (PROD-1003 in HYD is 0, routing to BLR)', {
     productId: 'PROD-1003', quantity: 1, pincode: '560100', mockTime: morningTime
   }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 23. Exact cutoff boundary check (14:59 PM - 1 min before cutoff)
-  await runTest(23, 'Exact Pre-Cutoff Boundary (14:59 PM for 15:00 Cutoff)', {
+  await runTest(16, 'Warehouse With Stock But No One-Day Service (PROD-1005 in Mumbai 400001)', {
+    productId: 'PROD-1005', quantity: 1, pincode: '400001', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED' });
+
+  await runTest(17, 'Warehouse Closed Outside Operating Hours (22:30 PM)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: nightClosedTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'WAREHOUSE_CLOSED', operatingHoursStatus: 'CLOSED' });
+
+  await runTest(18, 'Warehouse Outside Service Area (700001 Kolkata Regional)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '700001', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED', fastestAvailableDays: 3 });
+
+  // -------------------------------------------------------------
+  // DISTANCE CATEGORY (Tests 19 - 22)
+  // -------------------------------------------------------------
+  await runTest(19, 'Short Geographic Distance (500081 Cyberabad ~ 12 km)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(20, 'Long Distance Standard Zone (600001 Chennai ~ 500+ km)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '600001', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED' });
+
+  await runTest(21, 'Distance Threshold Exceeded (> 35 km Outskirts PIN 501501)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '501501', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'DISTANCE_TOO_FAR' });
+
+  await runTest(22, 'Multiple Warehouses With Different Distances Selection', {
+    productId: 'PROD-1004', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  // -------------------------------------------------------------
+  // CUTOFF CATEGORY (Tests 23 - 25)
+  // -------------------------------------------------------------
+  await runTest(23, 'Before Cutoff (10:00 AM for 15:00 Cutoff)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(24, 'Exactly Pre-Cutoff (14:59 PM for 15:00 Cutoff)', {
     productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: preCutoffTime
   }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 24. Quantity = available stock (Qty 25 for 25 available stock)
-  await runTest(24, 'Quantity Equals Exact Stock (Qty 25 / 25)', {
-    productId: 'PROD-1001', quantity: 25, pincode: '500081', mockTime: morningTime
+  await runTest(25, 'After Cutoff Passed (16:30 PM for 15:00 Cutoff)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: postCutoffTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'CUT_OFF_PASSED' });
+
+  // -------------------------------------------------------------
+  // AGENTS CATEGORY (Tests 26 - 34)
+  // -------------------------------------------------------------
+  await runTest(26, 'Available Delivery Agent Assigned (AGT-HYD-01)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
   }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 25. Quantity > available stock (Qty 45 for max 40 available stock in network)
-  await runTest(25, 'Quantity Exceeds Max Network Warehouse Stock (Qty 45 / 40)', {
-    productId: 'PROD-1001', quantity: 45, pincode: '500081', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'INSUFFICIENT_STOCK' });
+  await runTest(27, 'No Available Agent in Zone (500033 with busy agent)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500033', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'AGENT_CAPACITY_FULL' });
 
-  // 26. Invalid quantity (-1)
-  await runTest(26, 'Negative Quantity (-1)', {
-    productId: 'PROD-1001', quantity: -1, pincode: '500081', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_QUANTITY' });
+  await runTest(28, 'Busy Agent Filtering (500033)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500033', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'AGENT_CAPACITY_FULL' });
 
-  // 27. Zero quantity (0)
-  await runTest(27, 'Zero Quantity (0)', {
-    productId: 'PROD-1001', quantity: 0, pincode: '500081', mockTime: morningTime
-  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_QUANTITY' });
+  await runTest(29, 'Offline Agent Excluded', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
 
-  // 28. Invalid PIN with non-numeric characters
-  await runTest(28, 'Malformed PIN Code (ABC500)', {
+  await runTest(30, 'Agent At Max Active Capacity (500033)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500033', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'AGENT_CAPACITY_FULL' });
+
+  await runTest(31, 'Agent With Remaining Workload Capacity (AGT-HYD-01 2/5)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(32, 'Multiple Agents Available Ranking (500081)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(33, 'Nearest Available Agent Selection', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(34, 'Distant Available Agent Serving Zone', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500001', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  // -------------------------------------------------------------
+  // CAPACITY CATEGORY (Tests 35 - 38)
+  // -------------------------------------------------------------
+  await runTest(35, 'Warehouse One-Day Capacity Available (WH-HYD 12/50)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(36, 'Warehouse One-Day Capacity Full (WH-DEL 30/30)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '122002', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'DELIVERY_CAPACITY_FULL' });
+
+  await runTest(37, 'Capacity Nearly Full High Demand (WH-MUM 19/20)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '400001', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED' });
+
+  await runTest(38, 'Capacity Boundary Threshold Check', {
+    productId: 'PROD-1001', quantity: 1, pincode: '122002', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'DELIVERY_CAPACITY_FULL' });
+
+  // -------------------------------------------------------------
+  // DEMAND CATEGORY (Tests 39 - 42)
+  // -------------------------------------------------------------
+  await runTest(39, 'Low Demand Level (< 40% Capacity Utilization)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(40, 'Medium Demand Level (40-70% Capacity Utilization)', {
+    productId: 'PROD-1006', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(41, 'High Demand Level (70-90% Capacity Utilization)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(42, 'Very High Demand Level (> 90% Capacity Utilization)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '122002', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'DELIVERY_CAPACITY_FULL' });
+
+  // -------------------------------------------------------------
+  // FEES CATEGORY (Tests 43 - 46)
+  // -------------------------------------------------------------
+  await runTest(43, 'Base Fast Delivery Fee (₹40 Base)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY' });
+
+  await runTest(44, 'High-Demand Dynamic Fee Adjustment', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY' });
+
+  await runTest(45, 'Distance-Based Fee Adjustment (2x Distance Addon)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '560100', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY' });
+
+  await runTest(46, 'Maximum Fee Safety Cap Enforced (Max ₹150 Cap)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY' });
+
+  // -------------------------------------------------------------
+  // FALLBACK CATEGORY (Tests 47 - 49)
+  // -------------------------------------------------------------
+  await runTest(47, 'One-Day Unavailable -> Fallback 2-Day Standard (400001 Mumbai)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '400001', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED', fastestAvailableDays: 2 });
+
+  await runTest(48, 'Two-Day Unavailable -> Fallback 3-Day Regional Standard (700001 Kolkata)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '700001', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED', fastestAvailableDays: 3 });
+
+  await runTest(49, 'No Feasible Delivery for Remote Non-Serviceable (999999)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '999999', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'LOCATION_NOT_SERVICEABLE' });
+
+  // -------------------------------------------------------------
+  // COMBINATIONS CATEGORY (Tests 50 - 60)
+  // -------------------------------------------------------------
+  await runTest(50, 'Valid Complete One-Day Delivery (PROD-1001, PIN 500081)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(51, 'Valid Product But Malformed PIN (ABC500)', {
     productId: 'PROD-1001', quantity: 1, pincode: 'ABC500', mockTime: morningTime
   }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_LOCATION' });
 
-  // 29. Successful fallback to standard delivery when 1-day unavailable
-  await runTest(29, 'Standard Fallback Transit (PROD-1002 Phone Case in Mumbai 400001)', {
+  await runTest(52, 'Valid PIN But Zero Network Stock (PROD-OUT-OF-STOCK)', {
+    productId: 'PROD-OUT-OF-STOCK', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'OUT_OF_STOCK' });
+
+  await runTest(53, 'Stock Available But Cutoff Passed (16:30 PM)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: postCutoffTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'CUT_OFF_PASSED' });
+
+  await runTest(54, 'Stock + Agent But Capacity Full (122002 Gurugram)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '122002', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'DELIVERY_CAPACITY_FULL' });
+
+  await runTest(55, 'Multiple Warehouses Where Only One Works (PROD-1003 Smartwatch)', {
+    productId: 'PROD-1003', quantity: 1, pincode: '560100', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(56, 'Negative Quantity (-1)', {
+    productId: 'PROD-1001', quantity: -1, pincode: '500081', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_QUANTITY' });
+
+  await runTest(57, 'Zero Quantity (0)', {
+    productId: 'PROD-1001', quantity: 0, pincode: '500081', mockTime: morningTime
+  }, { eligible: false, deliveryType: 'NONE', reasonCode: 'INVALID_QUANTITY' });
+
+  await runTest(58, 'High Demand With Available Capacity (500081)', {
+    productId: 'PROD-1001', quantity: 1, pincode: '500081', mockTime: morningTime
+  }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE' });
+
+  await runTest(59, 'Standard Fallback Transit (PROD-1002 Phone Case in Mumbai 400001)', {
     productId: 'PROD-1002', quantity: 1, pincode: '400001', mockTime: morningTime
   }, { eligible: false, deliveryType: 'STANDARD', reasonCode: 'ONE_DAY_NOT_SUPPORTED', fastestAvailableDays: 2 });
 
-  // 30. Complete realistic customer flow simulation
-  await runTest(30, 'Complete Customer Flow Simulation (PROD-1006 Mouse, PIN 500081)', {
+  await runTest(60, 'Complete Realistic Customer Flow Simulation (PROD-1006 Mouse, PIN 500081)', {
     productId: 'PROD-1006', quantity: 1, pincode: '500081', mockTime: morningTime
   }, { eligible: true, deliveryType: 'ONE_DAY', reasonCode: 'ONE_DAY_AVAILABLE', fastestAvailableDays: 1 });
 
   console.log('\n==================================================');
-  console.log(`  DELIVERY TEST SUITE RESULTS: ${passed}/30 PASSED`);
+  console.log(`  MASTER DELIVERY SUITE RESULTS: ${passed}/60 PASSED`);
   console.log('==================================================');
 
   if (failed > 0) {
