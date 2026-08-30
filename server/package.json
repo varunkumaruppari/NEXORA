@@ -1,0 +1,33 @@
+{
+  "name": "resolv-ai-server",
+  "version": "1.0.0",
+  "description": "Backend API for RESOLV AI multi-agent customer problem resolution platform",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "express",
+    "gemini-api",
+    "multi-agent",
+    "ecommerce",
+    "customer-support"
+  ],
+  "author": "RESOLV AI Team",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
