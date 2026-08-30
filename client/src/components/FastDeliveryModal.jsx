@@ -644,25 +644,25 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   <p className="text-[11px] text-slate-400">
                     {loadingStep === 1 && '📍 Checking location coordinates...'}
                     {loadingStep === 2 && '🏭 Finding best feasible Hyderabad fulfillment hub...'}
-                    {loadingStep === 3 && '🛣️ Calculating road route & agent availability...'}
+                    {loadingStep === 3 && '🛣️ Calculating OSRM road route & agent availability...'}
                   </p>
                 </div>
               </div>
             ) : result ? (
               result.eligible ? (
-                /* ONE-DAY DELIVERY AVAILABLE SUCCESS BOX */
+                /* ONE-DAY DELIVERY AVAILABLE SUCCESS BOX (PHASE 15F SUCCESS STATE) */
                 <div className="p-5 rounded-2xl bg-gradient-to-b from-emerald-950/40 to-slate-950 border border-emerald-500/40 space-y-4 shadow-xl">
                   
                   {/* Badge & Title */}
                   <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
-                    <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
-                      <Zap className="w-3.5 h-3.5 fill-emerald-300 text-emerald-300" />
-                      <span>⚡ 1-DAY DELIVERY AVAILABLE</span>
+                    <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black shadow-sm">
+                      <Zap className="w-4 h-4 fill-emerald-300 text-emerald-300 animate-pulse" />
+                      <span>⚡ ARRIVES TOMORROW</span>
                     </div>
                     <span className="text-xs font-semibold text-slate-400">Location: {result.city || 'Hyderabad'} ({result.pincode})</span>
                   </div>
 
-                  {/* Delivery Promise Details */}
+                  {/* Delivery Promise Specs Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                     <div className="p-3 rounded-xl bg-slate-900/80 border border-emerald-500/20">
                       <div className="flex items-center space-x-1.5 text-[11px] font-medium text-slate-400">
@@ -685,11 +685,11 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                         <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                         <span>Fast Delivery Fee</span>
                       </div>
-                      <p className="text-sm font-black text-amber-400 mt-1">₹{result.fastDeliveryFee || 40}</p>
+                      <p className="text-sm font-black text-amber-400 mt-1">₹{result.fastDeliveryFee || result.fee || 40}</p>
                     </div>
                   </div>
 
-                  {/* Distance, Agent & Demand Intelligence Specs */}
+                  {/* Road Distance, Agent & Demand Specs */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1">
                     <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">Road Distance</span>
@@ -701,7 +701,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                     <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">Approx. Travel Time</span>
                       <span className="font-semibold text-white">
-                        {result.durationMinutes === 0 ? '0 min' : `~${result.durationMinutes} min`}
+                        {result.durationMinutes === 0 ? '0 min' : `~${result.durationMinutes || result.travelTimeMinutes || 15} min`}
                       </span>
                     </div>
 
@@ -723,7 +723,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                         <span>Fulfilled by: <strong>{result.warehouseName}</strong></span>
                       </div>
                       <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5" /> Feasible Agent Assigned
+                        <ShieldCheck className="w-3.5 h-3.5" /> Agent Assigned ({result.agentId || 'AGT-01'})
                       </span>
                     </div>
                   )}
@@ -735,33 +735,40 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   </div>
                 </div>
               ) : (
-                /* ONE-DAY UNAVAILABLE BOX */
+                /* FAST DELIVERY UNAVAILABLE CARD (PHASE 15F INELIGIBLE STATE) */
                 <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 space-y-4 shadow-xl">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                     <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-amber-400 text-xs font-bold">
                       <Clock className="w-3.5 h-3.5" />
-                      <span>
-                        {result.deliveryType === 'STANDARD' ? '1-DAY DELIVERY UNAVAILABLE (FASTEST: 2-3 DAYS)' : 'DELIVERY UNAVAILABLE'}
-                      </span>
+                      <span>Fast delivery unavailable</span>
                     </div>
                     <span className="text-xs font-semibold text-slate-400">PIN: {result.pincode}</span>
                   </div>
 
-                  {result.estimatedDeliveryDate && (
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-                      <div className="flex items-center space-x-2 text-xs text-slate-300 font-medium">
-                        <Truck className="w-4 h-4 text-cyan-400" />
-                        <span>Fastest Available Delivery:</span>
+                  {/* Standard Fallback Notice */}
+                  {result.deliveryType === 'STANDARD' && (
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1">
+                      <div className="flex items-center space-x-2 text-amber-300 font-bold">
+                        <Truck className="w-4 h-4 text-amber-400" />
+                        <span>📦 Standard Delivery Available (Arrives in 2-3 Days)</span>
                       </div>
-                      <span className="text-sm font-bold text-white">
-                        {result.fastestAvailableDays ? `${result.fastestAvailableDays} Days (${result.estimatedDeliveryDate})` : result.estimatedDeliveryDate}
-                      </span>
+                      {result.estimatedDeliveryDate && (
+                        <p className="text-slate-300 text-[11px] pl-6">
+                          Estimated delivery date: <strong>{result.estimatedDeliveryDate}</strong>
+                        </p>
+                      )}
                     </div>
                   )}
 
-                  <div className="flex items-start space-x-2.5 text-xs text-slate-300 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                  {/* Specific Ineligibility Reason Banner */}
+                  <div className="flex items-start space-x-2 text-xs text-slate-300 bg-slate-900 p-3 rounded-xl border border-slate-800">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span className="leading-relaxed">{result.customerMessage}</span>
+                    <div>
+                      <span className="font-semibold block text-slate-200">
+                        Reason: {result.reasonCode || 'UNAVAILABLE'}
+                      </span>
+                      <span className="text-slate-400 text-[11px]">{result.customerMessage}</span>
+                    </div>
                   </div>
                 </div>
               )
