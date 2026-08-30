@@ -49,8 +49,8 @@ function getMapPosition(lat, lon) {
   };
 }
 
-export default function FastDeliveryModal({ isOpen, onClose, product, defaultPincode = '500081', onDeliveryCheckResult = null }) {
-  const [pincode, setPincode] = useState(defaultPincode);
+export default function FastDeliveryModal({ isOpen, onClose, product, defaultPincode = '', onDeliveryCheckResult = null }) {
+  const [pincode, setPincode] = useState('');
   const [address, setAddress] = useState('');
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -64,11 +64,31 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
 
+  // Clean initial state on modal open: NO default location, NO 📍 YOU marker, NO auto-check
   useEffect(() => {
-    if (isOpen && product) {
-      handleCheckDelivery(pincode, address, quantity);
+    if (isOpen) {
+      setSelectedLocation(null);
+      setResult(null);
+      setErrorMsg(null);
+      setPincode(defaultPincode || '');
+      setAddress('');
+      setQuantity(1);
     }
-  }, [isOpen, product]);
+  }, [isOpen, product?.id, defaultPincode]);
+
+  const handlePincodeChange = (newPin) => {
+    setPincode(newPin);
+    setSelectedLocation(null);
+    setResult(null);
+    setErrorMsg(null);
+  };
+
+  const handleAddressChange = (newAddress) => {
+    setAddress(newAddress);
+    setSelectedLocation(null);
+    setResult(null);
+    setErrorMsg(null);
+  };
 
   const handleMapClick = (lat, lng) => {
     const cleanLat = Number(lat.toFixed(6));
@@ -83,7 +103,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
     setSelectedLocation(mapLocObj);
     setErrorMsg(null);
-    setResult(null); // Invalidate previous result while checking fresh coordinates
+    setResult(null); // Invalidate previous result
     handleCheckDelivery(pincode, address, quantity, mapLocObj);
   };
 
@@ -278,6 +298,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         if (response.data.pincode && !customLocObj) {
           setPincode(response.data.pincode);
         }
+        if (response.data.customerLatitude != null && response.data.customerLongitude != null) {
+          setSelectedLocation({
+            latitude: response.data.customerLatitude,
+            longitude: response.data.customerLongitude,
+            source: response.data.locationSource || 'PIN',
+            address: addressToCheck || `Resolved Location (${response.data.pincode || cleanPin})`,
+          });
+        }
         if (onDeliveryCheckResult && product?.id) {
           onDeliveryCheckResult(product.id, qtyToCheck, response.data.pincode || cleanPin, response.data);
         }
@@ -309,30 +337,20 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
     setGeoLocating(true);
     setErrorMsg(null);
+    setResult(null);
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         setGeoLocating(false);
         const { latitude, longitude } = position.coords;
-        setLoading(true);
-        try {
-          const response = await API.post('/delivery/check', {
-            productId: product.id || 'PROD-1001',
-            quantity,
-            location: { latitude, longitude, address: 'Current GPS Location, Hyderabad' },
-          });
-          if (response.data) {
-            setResult(response.data);
-            if (response.data.pincode) setPincode(response.data.pincode);
-            if (onDeliveryCheckResult && product?.id) {
-              onDeliveryCheckResult(product.id, quantity, response.data.pincode || '500081', response.data);
-            }
-          }
-        } catch (err) {
-          setErrorMsg('Failed to verify GPS location.');
-        } finally {
-          setLoading(false);
-        }
+        const gpsLocObj = {
+          latitude: Number(latitude.toFixed(6)),
+          longitude: Number(longitude.toFixed(6)),
+          source: 'GPS',
+          address: 'Current GPS Location, Hyderabad',
+        };
+        setSelectedLocation(gpsLocObj);
+        handleCheckDelivery(pincode, address, quantity, gpsLocObj);
       },
       (err) => {
         setGeoLocating(false);
@@ -418,7 +436,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   type="text"
                   maxLength={6}
                   value={pincode}
-                  onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => handlePincodeChange(e.target.value.replace(/\D/g, ''))}
                   placeholder="6-Digit PIN"
                   className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 />
@@ -430,7 +448,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 <input
                   type="text"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => handleAddressChange(e.target.value)}
                   placeholder="Address or Landmark (e.g. HITEC City)"
                   className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
@@ -446,7 +464,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   onChange={(e) => {
                     const q = Number(e.target.value);
                     setQuantity(q);
-                    handleCheckDelivery(pincode, address, q);
+                    if (result || selectedLocation || pincode || address) {
+                      handleCheckDelivery(pincode, address, q);
+                    }
                   }}
                   className="bg-transparent text-sm font-bold text-white focus:outline-none"
                 >
@@ -478,7 +498,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   key={item.pin}
                   onClick={() => handleSelectSample(item.pin)}
                   className={`px-2 py-0.5 rounded-lg text-xs font-semibold border transition-all ${
-                    pincode === item.pin
+                    pincode === item.pin && result
                       ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
                       : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:text-slate-200'
                   }`}
@@ -527,9 +547,9 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
 
               {/* Connecting Route Line if Result Available */}
               {(() => {
-                if (!result || !result.eligible) return null;
-                const whPos = getMapPosition(result.warehouseLatitude || 17.4435, result.warehouseLongitude || 78.3772);
-                const custPos = getMapPosition(result.customerLatitude || 17.4435, result.customerLongitude || 78.3772);
+                if (!result || !result.eligible || result.customerLatitude == null || result.warehouseLatitude == null) return null;
+                const whPos = getMapPosition(result.warehouseLatitude, result.warehouseLongitude);
+                const custPos = getMapPosition(result.customerLatitude, result.customerLongitude);
 
                 return (
                   <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
@@ -538,7 +558,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                       y1={`${whPos.y}%`}
                       x2={`${custPos.x}%`}
                       y2={`${custPos.y}%`}
-                      stroke="#10b981"
+                      stroke="#3b82f6"
                       strokeWidth="2.5"
                       strokeDasharray="5 3"
                       className="animate-pulse"
@@ -551,7 +571,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                       height="24"
                     >
                       <div className="flex items-center justify-center">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-900/90 border border-emerald-500/50 text-[10px] font-black text-emerald-300 shadow-md">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-900/90 border border-blue-500/50 text-[10px] font-black text-blue-300 shadow-md">
                           {result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`}
                         </span>
                       </div>
@@ -612,10 +632,12 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 });
               })()}
 
-              {/* Customer Pin Marker at Exact Validated Coordinates */}
+              {/* Customer Pin Marker at Exact Validated Coordinates ONLY if Location Exists */}
               {(() => {
-                if (!result || result.customerLatitude == null) return null;
-                const custPos = getMapPosition(result.customerLatitude, result.customerLongitude);
+                const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
+                const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
+                if (activeCustLat == null || activeCustLng == null) return null;
+                const custPos = getMapPosition(activeCustLat, activeCustLng);
 
                 return (
                   <div
@@ -772,7 +794,39 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   </div>
                 </div>
               )
-            ) : null}
+            ) : !selectedLocation ? (
+              /* STATE 1: NO LOCATION SELECTED INITIAL PROMPT */
+              <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col items-center justify-center text-center space-y-2 py-6">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <p className="text-xs font-bold text-white">Select Your Delivery Location</p>
+                <p className="text-[11px] text-slate-400 max-w-sm">
+                  Enter your 6-digit PIN code, landmark address, use GPS, or click directly on the map above to verify 1-day fast delivery feasibility.
+                </p>
+              </div>
+            ) : (
+              /* STATE 2: LOCATION SELECTED (AWAITING CHECK) */
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-indigo-500/30 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white truncate max-w-xs">{selectedLocation.address || 'Selected Location'}</p>
+                    <p className="text-[11px] text-slate-400">Click Check Availability to evaluate route</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleCheckDelivery(pincode, address, quantity, selectedLocation)}
+                  disabled={loading}
+                  className="px-4 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition-all flex items-center space-x-1.5"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>Check Now</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
