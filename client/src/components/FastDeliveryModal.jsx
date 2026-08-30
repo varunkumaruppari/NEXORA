@@ -276,6 +276,8 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     }
   }, [isOpen, result, selectedLocation]);
 
+  if (!isOpen || !product) return null;
+
   const handleCheckDelivery = async (pinToCheck = pincode, addressToCheck = address, qtyToCheck = quantity, customLocObj = selectedLocation) => {
     const cleanPin = String(pinToCheck || '').trim();
     if (!cleanPin && !addressToCheck && (!customLocObj || customLocObj.latitude == null)) {
@@ -404,16 +406,16 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
           
           <div className="flex items-center space-x-4 p-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50">
             <img
-              src={product.image}
-              alt={product.name}
+              src={product?.image || ''}
+              alt={product?.name || 'Product'}
               className="w-14 h-14 object-cover rounded-xl border border-slate-700/80 shadow"
             />
             <div className="flex-1 min-w-0">
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300">
-                {product.category || 'Tech'}
+                {product?.category || 'Tech'}
               </span>
-              <h3 className="text-sm font-bold text-white truncate mt-0.5">{product.name}</h3>
-              <p className="text-xs font-semibold text-emerald-400">₹{product.price?.toLocaleString('en-IN')}</p>
+              <h3 className="text-sm font-bold text-white truncate mt-0.5">{product?.name}</h3>
+              <p className="text-xs font-semibold text-emerald-400">₹{product?.price?.toLocaleString('en-IN')}</p>
             </div>
           </div>
 
