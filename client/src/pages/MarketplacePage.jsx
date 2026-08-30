@@ -336,7 +336,7 @@ export default function MarketplacePage() {
                       customerLocation={customerLocation}
                       onOpenModal={(p) => setFastDeliveryProduct(p)}
                       onDeliveryCheckResult={handleDeliveryCheckResult}
-                      cachedResult={deliveryCache[`${product.id}_1_${customerLocation?.pincode || '500081'}`]}
+                      cachedResult={customerLocation ? deliveryCache[`${product.id}_1_${customerLocation.pincode || customerLocation.latitude}`] : null}
                     />
                   </div>
                 </div>

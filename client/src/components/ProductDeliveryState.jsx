@@ -34,33 +34,36 @@ export default function ProductDeliveryState({
       return;
     }
 
+    if (!customerLocation || (!customerLocation.pincode && customerLocation.latitude == null)) {
+      setState(DELIVERY_STATES.UNKNOWN);
+      setResult(null);
+      return;
+    }
+
     // If cached result exists for current product + qty + location, use it
     if (cachedResult) {
       applyBackendResult(cachedResult);
       return;
     }
 
-    // If location is already known and saved, auto check delivery
-    if (customerLocation && (customerLocation.pincode || customerLocation.latitude)) {
+    // If valid location is known, perform location-aware delivery check
+    if (customerLocation.pincode || customerLocation.latitude != null) {
       performDeliveryCheck(customerLocation);
     } else {
       setState(DELIVERY_STATES.UNKNOWN);
       setResult(null);
     }
-  }, [product?.id, quantity, customerLocation?.pincode, customerLocation?.address, isOutOfStock, cachedResult]);
+  }, [product?.id, quantity, customerLocation?.pincode, customerLocation?.latitude, customerLocation?.longitude, isOutOfStock, cachedResult]);
 
   const applyBackendResult = (res) => {
     setResult(res);
-    if (!res || !res.success) {
-      if (res?.reasonCode === 'LOCATION_NOT_SERVICEABLE') {
-        setState(DELIVERY_STATES.DELIVERY_UNAVAILABLE);
-      } else {
-        setState(DELIVERY_STATES.FAST_UNAVAILABLE);
-      }
+    if (!res || typeof res.eligible !== 'boolean') {
+      setState(DELIVERY_STATES.ERROR);
+      setErrorMsg('Unable to check fast delivery right now.');
       return;
     }
 
-    if (res.eligible) {
+    if (res.eligible && res.deliveryType === 'ONE_DAY') {
       setState(DELIVERY_STATES.FAST_AVAILABLE);
     } else if (res.reasonCode === 'LOCATION_NOT_SERVICEABLE') {
       setState(DELIVERY_STATES.DELIVERY_UNAVAILABLE);
@@ -73,24 +76,30 @@ export default function ProductDeliveryState({
 
   const performDeliveryCheck = async (loc = customerLocation) => {
     if (isOutOfStock) return;
+    if (!loc || (!loc.pincode && loc.latitude == null)) {
+      setState(DELIVERY_STATES.UNKNOWN);
+      setResult(null);
+      return;
+    }
 
     setState(DELIVERY_STATES.CHECKING);
     setErrorMsg(null);
 
     try {
-      const pin = loc?.pincode || '500081';
-      const payload = {
+      const locationPayload = loc.latitude != null && loc.longitude != null
+        ? { latitude: Number(loc.latitude), longitude: Number(loc.longitude), source: loc.source || 'GPS', address: loc.address, pincode: loc.pincode }
+        : (loc.address ? { address: loc.address, pincode: loc.pincode } : { pincode: loc.pincode });
+
+      const response = await API.post('/delivery/check', {
         productId: product.id || 'PROD-1001',
         quantity,
-        location: loc?.address ? { address: loc.address, pincode: pin } : { pincode: pin },
-      };
+        location: locationPayload,
+      });
 
-      const response = await API.post('/delivery/check', payload);
-
-      if (response.data) {
+      if (response.data && typeof response.data.eligible === 'boolean') {
         applyBackendResult(response.data);
         if (onDeliveryCheckResult) {
-          onDeliveryCheckResult(product.id, quantity, pin, response.data);
+          onDeliveryCheckResult(product.id, quantity, loc.pincode || 'RESOLVED', response.data);
         }
       } else {
         throw new Error('Malformed API response');
