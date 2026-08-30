@@ -33,7 +33,8 @@ export const REASON_MESSAGES = {
  * Calculates Haversine geographic distance in kilometers between two lat/lng coordinates
  */
 export function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 12.5; // Default safe distance fallback
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 12.5;
+  if (lat1 === lat2 && lon1 === lon2) return 0;
   const R = 6371; // Earth's radius in kilometers
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -405,9 +406,9 @@ export async function checkDeliveryEligibility(options = {}) {
     }
 
     // -------------------------------------------------------------
-    // STEP 13: Estimated Travel Time (Assumed avg speed 30 km/h + 45 min warehouse processing)
+    // STEP 13: Estimated Travel Time (Consistent with route calculation)
     // -------------------------------------------------------------
-    const travelTimeMinutes = Math.round((distanceKm / 30) * 60) + 45;
+    const travelTimeMinutes = distanceKm === 0 ? 0 : (durationMinutes || Math.round((distanceKm / 30) * 60) + 10);
 
     // -------------------------------------------------------------
     // STEP 14: Daily Warehouse One-Day Capacity Check
@@ -426,12 +427,28 @@ export async function checkDeliveryEligibility(options = {}) {
         estimatedDeliveryDate: estDateStr,
         fastestAvailableDays: standardDays,
         warehouseId: selectedWarehouse.warehouseId,
+        warehouseName: selectedWarehouse.name,
+        warehouseLatitude: selectedWarehouse.latitude,
+        warehouseLongitude: selectedWarehouse.longitude,
+        customerLatitude: geocodeResult.latitude,
+        customerLongitude: geocodeResult.longitude,
         cutoffTime: selectedWarehouse.cutoffTime,
         cutoffFormatted,
         capacityStatus: 'FULL',
         distanceKm,
+        durationMinutes: travelTimeMinutes,
+        travelTimeMinutes,
         reasonCode: 'DELIVERY_CAPACITY_FULL',
         customerMessage: REASON_MESSAGES.DELIVERY_CAPACITY_FULL,
+        allWarehouses: Object.values(WAREHOUSES).map((w) => ({
+          warehouseId: w.warehouseId,
+          name: w.name,
+          code: w.code,
+          latitude: w.latitude,
+          longitude: w.longitude,
+          oneDayEnabled: w.oneDayEnabled,
+          status: !w.oneDayEnabled ? 'UNAVAILABLE' : (w.currentReservedCapacity >= w.maxOneDayCapacity ? 'CONSTRAINED' : 'AVAILABLE'),
+        })),
       });
     }
 
@@ -484,18 +501,36 @@ export async function checkDeliveryEligibility(options = {}) {
       minutesUntilCutoff: minutesRemaining,
       capacityStatus: 'AVAILABLE',
       distanceKm,
+      durationMinutes: travelTimeMinutes,
+      travelTimeMinutes,
       agentId: availableAgent ? availableAgent.agentId : 'AGT-HYD-01',
       demandLevel,
       fastDeliveryFee,
-      travelTimeMinutes,
       operatingHoursStatus: 'OPEN',
       reasonCode: 'ONE_DAY_AVAILABLE',
       customerMessage: REASON_MESSAGES.ONE_DAY_AVAILABLE,
+      warehouseId: selectedWarehouse.warehouseId,
+      warehouseName: selectedWarehouse.name,
+      warehouseLatitude: selectedWarehouse.latitude,
+      warehouseLongitude: selectedWarehouse.longitude,
+      customerLatitude: geocodeResult.latitude,
+      customerLongitude: geocodeResult.longitude,
       warehouseInfo: {
         warehouseId: selectedWarehouse.warehouseId,
         warehouseName: selectedWarehouse.name,
         city: selectedWarehouse.city,
+        latitude: selectedWarehouse.latitude,
+        longitude: selectedWarehouse.longitude,
       },
+      allWarehouses: Object.values(WAREHOUSES).map((w) => ({
+        warehouseId: w.warehouseId,
+        name: w.name,
+        code: w.code,
+        latitude: w.latitude,
+        longitude: w.longitude,
+        oneDayEnabled: w.oneDayEnabled,
+        status: !w.oneDayEnabled ? 'UNAVAILABLE' : (w.currentReservedCapacity >= w.maxOneDayCapacity ? 'CONSTRAINED' : 'AVAILABLE'),
+      })),
     });
 
   } catch (error) {
@@ -557,8 +592,12 @@ async function recordAndReturn(data) {
     cutoffFormatted: data.cutoffFormatted || null,
     minutesUntilCutoff: data.minutesUntilCutoff ?? null,
     capacityStatus: data.capacityStatus || null,
-    city: 'Hyderabad',
+    warehouseId: data.warehouseInfo?.warehouseId || data.warehouseId || null,
     warehouseName: data.warehouseInfo?.warehouseName || data.warehouseName || null,
+    warehouseLatitude: data.warehouseInfo?.latitude ?? data.warehouseLatitude ?? null,
+    warehouseLongitude: data.warehouseInfo?.longitude ?? data.warehouseLongitude ?? null,
+    customerLatitude: data.customerLatitude ?? null,
+    customerLongitude: data.customerLongitude ?? null,
     distanceKm: data.distanceKm ?? null,
     distanceType: data.distanceType || 'ROAD',
     durationMinutes: data.travelTimeMinutes ?? data.durationMinutes ?? null,
@@ -571,5 +610,6 @@ async function recordAndReturn(data) {
     reasonCode: data.reasonCode,
     customerMessage: data.customerMessage,
     warehouseInfo: data.warehouseInfo || (data.warehouseId ? { warehouseId: data.warehouseId } : null),
+    allWarehouses: data.allWarehouses || null,
   };
 }
