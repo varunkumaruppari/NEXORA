@@ -877,7 +877,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                 </div>
                 <p className="text-xs font-bold text-white">Select Your Delivery Location</p>
                 <p className="text-[11px] text-slate-400 max-w-sm">
-                  Enter your 6-digit PIN code, landmark address, use GPS, or click directly on the map above to verify 1-day fast delivery feasibility.
+                  Enter your 6-digit PIN code, select a sample zone, or click directly on the map above to verify fast delivery feasibility.
                 </p>
               </div>
             ) : (
@@ -892,11 +892,11 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
                   </div>
                 </div>
                 <button
-                  onClick={() => handleCheckDelivery(pincode, address, quantity, selectedLocation)}
+                  onClick={() => handleCheckDelivery(pincode, quantity, selectedLocation)}
                   disabled={loading}
-                  className="px-4 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition-all flex items-center space-x-1.5"
+                  className="px-4 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition-all flex items-center space-x-1.5 disabled:opacity-50"
                 >
-                  <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 fill-slate-950" />}
                   <span>Check Now</span>
                 </button>
               </div>
