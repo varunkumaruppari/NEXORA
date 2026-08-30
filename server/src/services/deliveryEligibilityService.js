@@ -6,12 +6,14 @@
 import mongoose from 'mongoose';
 import { WAREHOUSES, DELIVERY_ZONES, PRODUCT_INVENTORY, DELIVERY_AGENTS } from '../data/deliveryData.js';
 import DeliveryAuditModel from '../models/DeliveryAudit.js';
+import { geocodeLocation } from './locationService.js';
+import { calculateRoute } from './routeService.js';
 
 export const REASON_MESSAGES = {
   ONE_DAY_AVAILABLE: '⚡ One-day fast delivery is available for your location.',
   PRODUCT_NOT_FOUND: 'The specified product could not be located in our catalog.',
   INVALID_QUANTITY: 'Please enter a valid order quantity of 1 or more.',
-  INVALID_LOCATION: 'Please enter a valid 6-digit PIN code.',
+  INVALID_LOCATION: 'Please enter a valid 6-digit PIN code or address.',
   LOCATION_NOT_SERVICEABLE: 'Sorry, we currently do not deliver to this location.',
   OUT_OF_STOCK: 'This product is currently out of stock across all fulfillment hubs.',
   INSUFFICIENT_STOCK: 'Requested quantity exceeds available inventory in nearby hubs.',
@@ -39,32 +41,49 @@ export function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c * 10) / 10;
+  const distance = R * c;
+  return Math.round(distance * 10) / 10; // Round to 1 decimal place
 }
 
 /**
- * Main 18-step master delivery eligibility checking service
+ * Formats a Date offset into ISO YYYY-MM-DD format
  */
-export const checkDeliveryEligibility = async ({
-  productId,
-  quantity = 1,
-  pincode,
-  mockTime = null,
-}) => {
-  const auditId = `AUD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-  const now = mockTime ? new Date(mockTime) : new Date();
+export function formatDateOffset(baseDate, daysToAdd) {
+  const target = new Date(baseDate);
+  target.setDate(target.getDate() + daysToAdd);
+  return target.toISOString().split('T')[0];
+}
+
+/**
+ * Formats hour/minute into readable 12-hour AM/PM string
+ */
+export function format12HourTime(hour, min) {
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour % 12 || 12;
+  const mStr = min < 10 ? `0${min}` : `${min}`;
+  return `${h12}:${mStr} ${period}`;
+}
+
+/**
+ * Master Deterministic Fast Delivery Eligibility Pipeline (18 Steps)
+ */
+export async function checkDeliveryEligibility(options = {}) {
+  const auditId = `AUD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
   try {
-    const qty = parseInt(quantity, 10);
+    const { productId, quantity, pincode, location, mockTime } = options;
+
+    // Use mockTime for deterministic testing if provided, otherwise real system clock
+    const now = mockTime ? new Date(mockTime) : new Date();
 
     // -------------------------------------------------------------
     // STEP 1: Product Existence Check
     // -------------------------------------------------------------
-    if (!productId || !PRODUCT_INVENTORY[productId]) {
+    if (!productId || typeof productId !== 'string') {
       return recordAndReturn({
         auditId,
         productId: productId || 'UNKNOWN',
-        requestedQuantity: qty,
+        requestedQuantity: quantity || 0,
         pincode: pincode || 'UNKNOWN',
         eligible: false,
         deliveryType: 'NONE',
@@ -74,11 +93,23 @@ export const checkDeliveryEligibility = async ({
     }
 
     const productData = PRODUCT_INVENTORY[productId];
+    if (!productData) {
+      return recordAndReturn({
+        auditId,
+        productId,
+        requestedQuantity: quantity || 0,
+        pincode: pincode || 'UNKNOWN',
+        eligible: false,
+        deliveryType: 'NONE',
+        reasonCode: 'PRODUCT_NOT_FOUND',
+        customerMessage: REASON_MESSAGES.PRODUCT_NOT_FOUND,
+      });
+    }
 
     // -------------------------------------------------------------
     // STEP 2: Quantity Validity Check
     // -------------------------------------------------------------
-    if (typeof quantity === 'number' && (!Number.isInteger(quantity) || quantity <= 0)) {
+    if (quantity === null || quantity === undefined || typeof quantity === 'object' || typeof quantity === 'boolean') {
       return recordAndReturn({
         auditId,
         productId,
@@ -91,7 +122,8 @@ export const checkDeliveryEligibility = async ({
       });
     }
 
-    if (typeof quantity === 'string' && (quantity.includes('.') || isNaN(Number(quantity)))) {
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
       return recordAndReturn({
         auditId,
         productId,
@@ -104,35 +136,26 @@ export const checkDeliveryEligibility = async ({
       });
     }
 
-    if (isNaN(qty) || qty <= 0 || !Number.isFinite(qty)) {
-      return recordAndReturn({
-        auditId,
-        productId,
-        requestedQuantity: qty,
-        pincode: pincode || 'UNKNOWN',
-        eligible: false,
-        deliveryType: 'NONE',
-        reasonCode: 'INVALID_QUANTITY',
-        customerMessage: REASON_MESSAGES.INVALID_QUANTITY,
-      });
-    }
+    // -------------------------------------------------------------
+    // STEP 3: Location / Address / Geocoding Validation
+    // -------------------------------------------------------------
+    const locInput = location || pincode;
+    const geocodeResult = await geocodeLocation(locInput);
 
-    // -------------------------------------------------------------
-    // STEP 3: Location / PIN Code Validity Check
-    // -------------------------------------------------------------
-    const cleanPincode = (pincode || '').toString().trim();
-    if (!cleanPincode || cleanPincode.length !== 6 || !/^\d{6}$/.test(cleanPincode)) {
+    if (!geocodeResult.success) {
       return recordAndReturn({
         auditId,
         productId,
         requestedQuantity: qty,
-        pincode: cleanPincode || 'INVALID',
+        pincode: typeof pincode === 'string' ? pincode : 'INVALID',
         eligible: false,
         deliveryType: 'NONE',
         reasonCode: 'INVALID_LOCATION',
         customerMessage: REASON_MESSAGES.INVALID_LOCATION,
       });
     }
+
+    const cleanPincode = geocodeResult.pincode;
 
     // -------------------------------------------------------------
     // STEP 4: Location Serviceability Check
@@ -152,17 +175,19 @@ export const checkDeliveryEligibility = async ({
     }
 
     // -------------------------------------------------------------
-    // STEP 5: Warehouse Discovery & Distance Calculation
+    // STEP 5: Hyderabad Multi-Warehouse Discovery & Route Intelligence
     // -------------------------------------------------------------
     const productStocks = productData.warehouses || {};
-    const candidateWarehouses = Object.keys(WAREHOUSES)
-      .map((id) => WAREHOUSES[id])
-      .filter((w) => w.warehouseId !== 'WH-CLOSED');
+    const candidateWarehouses = Object.values(WAREHOUSES).filter(
+      (w) => w.warehouseId !== 'WH-CLOSED' && w.active !== false
+    );
 
     let selectedWarehouse = null;
     let distanceKm = 0;
+    let durationMinutes = 0;
+    let distanceType = 'ROAD';
 
-    // Check if primary warehouse for zone has stock and is available
+    // Primary zone warehouse check
     if (zoneInfo.primaryWarehouse && WAREHOUSES[zoneInfo.primaryWarehouse]) {
       const primaryWh = WAREHOUSES[zoneInfo.primaryWarehouse];
       const stockData = productStocks[primaryWh.warehouseId];
@@ -171,7 +196,7 @@ export const checkDeliveryEligibility = async ({
       }
     }
 
-    // Fallback to any warehouse serving customer with stock
+    // Multi-warehouse ranking: iterate through all candidate Hyderabad hubs to find best feasible stock
     if (!selectedWarehouse) {
       for (const w of candidateWarehouses) {
         const stockData = productStocks[w.warehouseId];
@@ -182,16 +207,18 @@ export const checkDeliveryEligibility = async ({
       }
     }
 
-    // Calculate Haversine geographic distance if zone and warehouse coordinates exist
-    if (selectedWarehouse && zoneInfo.latitude && zoneInfo.longitude) {
-      distanceKm = calculateHaversineDistance(
-        selectedWarehouse.latitude,
-        selectedWarehouse.longitude,
-        zoneInfo.latitude,
-        zoneInfo.longitude
+    // Calculate real road distance and travel time via route service
+    if (selectedWarehouse && geocodeResult.latitude && geocodeResult.longitude) {
+      const routeResult = await calculateRoute(
+        { latitude: selectedWarehouse.latitude, longitude: selectedWarehouse.longitude },
+        { latitude: geocodeResult.latitude, longitude: geocodeResult.longitude }
       );
+      distanceKm = routeResult.distanceKm;
+      durationMinutes = routeResult.durationMinutes;
+      distanceType = routeResult.distanceType || 'ROAD';
     } else {
-      distanceKm = 14.2; // Realistic fallback estimate
+      distanceKm = 14.2;
+      durationMinutes = 45;
     }
 
     // -------------------------------------------------------------
@@ -530,9 +557,14 @@ async function recordAndReturn(data) {
     cutoffFormatted: data.cutoffFormatted || null,
     minutesUntilCutoff: data.minutesUntilCutoff ?? null,
     capacityStatus: data.capacityStatus || null,
+    city: 'Hyderabad',
+    warehouseName: data.warehouseInfo?.warehouseName || data.warehouseName || null,
     distanceKm: data.distanceKm ?? null,
+    distanceType: data.distanceType || 'ROAD',
+    durationMinutes: data.travelTimeMinutes ?? data.durationMinutes ?? null,
     agentId: data.agentId || null,
     demandLevel: data.demandLevel || null,
+    fee: data.fastDeliveryFee ?? null,
     fastDeliveryFee: data.fastDeliveryFee ?? null,
     travelTimeMinutes: data.travelTimeMinutes ?? null,
     operatingHoursStatus: data.operatingHoursStatus || null,
@@ -540,29 +572,4 @@ async function recordAndReturn(data) {
     customerMessage: data.customerMessage,
     warehouseInfo: data.warehouseInfo || (data.warehouseId ? { warehouseId: data.warehouseId } : null),
   };
-}
-
-/**
- * Format Date + Offset days to readable string (e.g. "Tomorrow" or "Sep 2, 2026")
- */
-function formatDateOffset(baseDate, offsetDays) {
-  const target = new Date(baseDate);
-  target.setDate(target.getDate() + offsetDays);
-
-  if (offsetDays === 1) {
-    return 'Tomorrow';
-  }
-
-  const options = { month: 'short', day: 'numeric', year: 'numeric' };
-  return target.toLocaleDateString('en-US', options);
-}
-
-/**
- * Format 24-hour time "15:00" to "3:00 PM"
- */
-function format12HourTime(hours, minutes) {
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const h12 = hours % 12 || 12;
-  const mStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
-  return `${h12}:${mStr} ${ampm}`;
 }

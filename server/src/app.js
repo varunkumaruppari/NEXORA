@@ -34,6 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', healthRoutes);
 app.use('/api/cases', caseRoutes);
 app.use('/api/delivery', deliveryRoutes);
+app.use('/api/location', deliveryRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {
