@@ -52,6 +52,7 @@ function getMapPosition(lat, lon) {
 export default function FastDeliveryModal({ isOpen, onClose, product, defaultPincode = '500081', onDeliveryCheckResult = null }) {
   const [pincode, setPincode] = useState(defaultPincode);
   const [address, setAddress] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -68,6 +69,23 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       handleCheckDelivery(pincode, address, quantity);
     }
   }, [isOpen, product]);
+
+  const handleMapClick = (lat, lng) => {
+    const cleanLat = Number(lat.toFixed(6));
+    const cleanLng = Number(lng.toFixed(6));
+
+    const mapLocObj = {
+      latitude: cleanLat,
+      longitude: cleanLng,
+      source: 'MAP_CLICK',
+      address: `Selected Map Location (${cleanLat.toFixed(4)}, ${cleanLng.toFixed(4)})`,
+    };
+
+    setSelectedLocation(mapLocObj);
+    setErrorMsg(null);
+    setResult(null); // Invalidate previous result while checking fresh coordinates
+    handleCheckDelivery(pincode, address, quantity, mapLocObj);
+  };
 
   // Real Leaflet + OpenStreetMap Map Tile Initialization
   useEffect(() => {
@@ -98,6 +116,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
       const map = mapInstanceRef.current;
       const layerGroup = markersLayerRef.current;
       if (!map || !layerGroup) return;
+
+      // Register map click listener for Phase 15A Location Selection
+      map.off('click');
+      map.on('click', (e) => {
+        if (e && e.latlng) {
+          handleMapClick(e.latlng.lat, e.latlng.lng);
+        }
+      });
 
       layerGroup.clearLayers();
 
@@ -144,41 +170,57 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         }
       });
 
-      if (result && result.eligible && result.customerLatitude != null && result.customerLongitude != null) {
-        const custLat = result.customerLatitude;
-        const custLng = result.customerLongitude;
-        boundsPoints.push([custLat, custLng]);
+      // Render Customer Marker (📍 YOU) at exact selected map coordinates or resolved backend coordinates
+      const activeCustLat = selectedLocation?.latitude ?? result?.customerLatitude;
+      const activeCustLng = selectedLocation?.longitude ?? result?.customerLongitude;
+
+      if (activeCustLat != null && activeCustLng != null) {
+        boundsPoints.push([activeCustLat, activeCustLng]);
 
         const custIcon = L.divIcon({
-          html: `<div style="display:flex; align-items:center; gap:4px;"><div style="width:24px; height:24px; border-radius:50%; background:#f59e0b; color:#020617; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:11px; box-shadow:0 0 12px rgba(245,158,11,0.8);">📍</div><span style="font-size:10px; font-weight:800; color:#fde68a; background:rgba(15,23,42,0.9); padding:2px 6px; border-radius:4px; border:1px solid rgba(245,158,11,0.5);">YOU</span></div>`,
+          html: `<div style="display:flex; flex-direction:column; align-items:center; transform:translate(-50%, -100%);"><div style="background:#f59e0b; color:#020617; font-weight:900; font-size:10px; padding:2px 6px; border-radius:6px; border:1.5px solid #fff; box-shadow:0 4px 10px rgba(0,0,0,0.7); white-space:nowrap; margin-bottom:2px;">📍 YOU</div><div style="width:14px; height:14px; border-radius:50%; background:#f59e0b; border:2px solid #fff; box-shadow:0 0 10px #f59e0b;"></div></div>`,
           className: 'leaflet-custom-cust',
-          iconSize: [60, 24],
-          iconAnchor: [12, 12],
+          iconSize: [60, 36],
+          iconAnchor: [30, 36],
         });
 
-        L.marker([custLat, custLng], { icon: custIcon }).addTo(layerGroup);
-
-        const whLat = result.warehouseLatitude || 17.4435;
-        const whLng = result.warehouseLongitude || 78.3772;
-
-        L.polyline([[whLat, whLng], [custLat, custLng]], {
-          color: '#10b981',
-          weight: 3.5,
-          dashArray: '6, 6',
+        const custMarker = L.marker([activeCustLat, activeCustLng], {
+          icon: custIcon,
+          zIndexOffset: 1000, // Ensure customer marker renders above warehouse markers and lines
         }).addTo(layerGroup);
 
-        const midLat = (whLat + custLat) / 2;
-        const midLng = (whLng + custLng) / 2;
-        const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
+        custMarker.bindPopup(`
+          <div style="font-family:sans-serif; padding:4px;">
+            <div style="font-weight:bold; color:#f59e0b; font-size:12px; margin-bottom:2px;">📍 YOU</div>
+            <div style="font-size:10px; color:#94a3b8;">Selected delivery location</div>
+            <div style="font-size:10px; color:#cbd5e1; margin-top:4px;">Latitude: <b>${activeCustLat.toFixed(4)}</b></div>
+            <div style="font-size:10px; color:#cbd5e1;">Longitude: <b>${activeCustLng.toFixed(4)}</b></div>
+          </div>
+        `);
 
-        const badgeIcon = L.divIcon({
-          html: `<div style="padding:2px 8px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1px solid rgba(16,185,129,0.5); font-size:10px; font-weight:900; color:#6ee7b7; white-space:nowrap; box-shadow:0 4px 6px -1px rgba(0,0,0,0.5);">${distText}</div>`,
-          className: 'leaflet-custom-badge',
-          iconSize: [80, 20],
-          iconAnchor: [40, 10],
-        });
+        if (result && result.eligible && result.warehouseLatitude != null && result.warehouseLongitude != null) {
+          const whLat = result.warehouseLatitude;
+          const whLng = result.warehouseLongitude;
 
-        L.marker([midLat, midLng], { icon: badgeIcon }).addTo(layerGroup);
+          L.polyline([[whLat, whLng], [activeCustLat, activeCustLng]], {
+            color: '#10b981',
+            weight: 3.5,
+            dashArray: '6, 6',
+          }).addTo(layerGroup);
+
+          const midLat = (whLat + activeCustLat) / 2;
+          const midLng = (whLng + activeCustLng) / 2;
+          const distText = result.distanceKm < 1 ? `Approx. ${result.distanceKm} km` : `${result.distanceKm} km`;
+
+          const badgeIcon = L.divIcon({
+            html: `<div style="padding:2px 8px; border-radius:9999px; background:rgba(15,23,42,0.95); border:1px solid rgba(16,185,129,0.5); font-size:10px; font-weight:900; color:#6ee7b7; white-space:nowrap; box-shadow:0 4px 6px -1px rgba(0,0,0,0.5);">${distText}</div>`,
+            className: 'leaflet-custom-badge',
+            iconSize: [80, 20],
+            iconAnchor: [40, 10],
+          });
+
+          L.marker([midLat, midLng], { icon: badgeIcon }).addTo(layerGroup);
+        }
       }
 
       if (boundsPoints.length > 0) {
@@ -189,14 +231,14 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     } catch (e) {
       console.warn('Leaflet map initialization fallback:', e);
     }
-  }, [isOpen, result]);
+  }, [isOpen, result, selectedLocation]);
 
   if (!isOpen || !product) return null;
 
-  const handleCheckDelivery = async (pinToCheck = pincode, addressToCheck = address, qtyToCheck = quantity) => {
+  const handleCheckDelivery = async (pinToCheck = pincode, addressToCheck = address, qtyToCheck = quantity, customLocObj = selectedLocation) => {
     const cleanPin = String(pinToCheck || '').trim();
-    if (!cleanPin && !addressToCheck) {
-      setErrorMsg('Please enter a valid 6-digit PIN code or address.');
+    if (!cleanPin && !addressToCheck && (!customLocObj || customLocObj.latitude == null)) {
+      setErrorMsg('Please select a location on the map or enter a valid 6-digit PIN code.');
       setResult(null);
       return;
     }
@@ -209,16 +251,23 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
     const stepTimer2 = setTimeout(() => setLoadingStep(3), 500);
 
     try {
+      const locationPayload = customLocObj?.latitude != null
+        ? customLocObj
+        : (addressToCheck ? { address: addressToCheck, pincode: cleanPin } : { pincode: cleanPin });
+
       const response = await API.post('/delivery/check', {
         productId: product.id || 'PROD-1001',
         quantity: qtyToCheck,
-        location: addressToCheck ? { address: addressToCheck, pincode: cleanPin } : { pincode: cleanPin },
+        location: locationPayload,
       });
 
       if (response.data) {
         setResult(response.data);
+        if (response.data.pincode && !customLocObj) {
+          setPincode(response.data.pincode);
+        }
         if (onDeliveryCheckResult && product?.id) {
-          onDeliveryCheckResult(product.id, qtyToCheck, cleanPin, response.data);
+          onDeliveryCheckResult(product.id, qtyToCheck, response.data.pincode || cleanPin, response.data);
         }
       } else {
         throw new Error('Malformed API response');
@@ -230,7 +279,7 @@ export default function FastDeliveryModal({ isOpen, onClose, product, defaultPin
         eligible: false,
         deliveryType: 'NONE',
         reasonCode: 'ENGINE_ERROR',
-        customerMessage: "Sorry, we couldn't check delivery availability right now. Please try again.",
+        customerMessage: "Unable to check this location right now. Please try again.",
       });
     } finally {
       clearTimeout(stepTimer1);

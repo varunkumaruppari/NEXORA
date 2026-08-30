@@ -12,6 +12,8 @@ const geocodeCache = new Map();
  */
 export function isValidCoordinate(lat, lon) {
   if (lat === null || lon === null || lat === undefined || lon === undefined) return false;
+  if (typeof lat === 'object' || typeof lon === 'object') return false;
+  if (lat === '' || lon === '') return false;
   const numLat = Number(lat);
   const numLon = Number(lon);
   return (
@@ -27,27 +29,68 @@ export function isValidCoordinate(lat, lon) {
 }
 
 /**
- * Geocodes an input location object { pincode, address, latitude, longitude }
+ * Helper to find nearest delivery zone pincode for given lat/lng
+ */
+export function findNearestZonePincode(lat, lon) {
+  let nearestPin = '500081';
+  let minDistance = Infinity;
+
+  for (const [pin, zone] of Object.entries(DELIVERY_ZONES)) {
+    if (!zone || zone.latitude == null || zone.longitude == null) continue;
+    const dLat = (zone.latitude - lat) * (Math.PI / 180);
+    const dLon = (zone.longitude - lon) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat * (Math.PI / 180)) * Math.cos(zone.latitude * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const dist = 6371 * c; // Earth radius in km
+
+    if (dist < minDistance) {
+      minDistance = dist;
+      nearestPin = pin;
+    }
+  }
+
+  return nearestPin;
+}
+
+/**
+ * Geocodes an input location object { pincode, address, latitude, longitude, source }
  */
 export async function geocodeLocation(locationInput) {
   if (!locationInput) {
     return { success: false, reason: 'MISSING_LOCATION' };
   }
 
-  // Handle direct lat/lng GPS input from browser geolocation
-  if (locationInput.latitude !== undefined && locationInput.longitude !== undefined) {
+  // Handle direct lat/lng GPS or MAP_CLICK coordinate input
+  if (
+    typeof locationInput === 'object' &&
+    locationInput !== null &&
+    locationInput.latitude != null &&
+    locationInput.longitude != null
+  ) {
     const lat = Number(locationInput.latitude);
     const lon = Number(locationInput.longitude);
-    if (isValidCoordinate(lat, lon)) {
-      return {
-        success: true,
-        latitude: lat,
-        longitude: lon,
-        pincode: locationInput.pincode ? String(locationInput.pincode).trim() : '500081',
-        formattedAddress: locationInput.address || 'Current GPS Location, Hyderabad',
-        source: 'BROWSER_GPS',
-      };
+
+    if (!isValidCoordinate(lat, lon)) {
+      return { success: false, reason: 'INVALID_LOCATION' };
     }
+
+    const src = locationInput.source || 'BROWSER_GPS';
+    const resolvedPin = locationInput.pincode ? String(locationInput.pincode).trim() : findNearestZonePincode(lat, lon);
+
+    return {
+      success: true,
+      latitude: lat,
+      longitude: lon,
+      pincode: resolvedPin,
+      formattedAddress:
+        locationInput.address ||
+        (src === 'MAP_CLICK'
+          ? `Selected Map Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`
+          : 'Current GPS Location, Hyderabad'),
+      source: src,
+    };
   }
 
   // Normalize PIN code input

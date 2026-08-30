@@ -515,6 +515,7 @@ export async function checkDeliveryEligibility(options = {}) {
       warehouseLongitude: selectedWarehouse.longitude,
       customerLatitude: geocodeResult.latitude,
       customerLongitude: geocodeResult.longitude,
+      locationSource: geocodeResult.source,
       warehouseInfo: {
         warehouseId: selectedWarehouse.warehouseId,
         warehouseName: selectedWarehouse.name,
@@ -598,6 +599,7 @@ async function recordAndReturn(data) {
     warehouseLongitude: data.warehouseInfo?.longitude ?? data.warehouseLongitude ?? null,
     customerLatitude: data.customerLatitude ?? null,
     customerLongitude: data.customerLongitude ?? null,
+    locationSource: data.locationSource || 'PIN',
     distanceKm: data.distanceKm ?? null,
     distanceType: data.distanceType || 'ROAD',
     durationMinutes: data.travelTimeMinutes ?? data.durationMinutes ?? null,
